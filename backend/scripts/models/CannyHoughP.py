@@ -8,9 +8,9 @@ class CannyHoughP():
     _POLYGON = np.array([[[100, 540], [900, 540], [515, 320], [450, 320]]])
     _DEFAULT_CONFIG = {
                 'in_range': {'lower_bounds': 150, 'upper_bounds': 255},
-                'canny': {'cannyLow': 50, 'cannyHigh': 100, 'blurFirst': False},
-                'hough': {'rho': 1, 'theta': np.radians(1), 'thresh': 50, 'minLength': 10, 'maxGap': 20},
-                'composite': {'stroke': True, 'fill': True, 'poly': _POLYGON, 'alpha': 0.8, 'beta': 0.3, 'gamma': 0.0},
+                'canny': {'canny_low': 50, 'canny_high': 100, 'blur_first': False},
+                'hough': {'rho': 1, 'theta': np.pi / 180, 'thresh': 50, 'min_length': 10, 'max_gap': 20},
+                'composite': {'stroke': True, "stroke_color": (0, 0, 255), 'fill': True, "fill_color": (0, 255, 0), 'poly': _POLYGON, 'alpha': 0.8, 'beta': 0.3, 'gamma': 0.0},
                 'roi': {'poly': _POLYGON}
             }
 
@@ -51,33 +51,33 @@ class CannyHoughP():
         thresh = cv2.inRange(img, lower_bounds, upper_bounds)
         return thresh
 
-    def _select_ROI(self, threshImage, poly):
-        mask = np.zeros_like(threshImage)
-        if len(threshImage.shape) > 2:
-            numChannels = threshImage.shape[2]
-            roiColor = (255,) * numChannels
+    def _select_ROI(self, thresh_img, poly):
+        mask = np.zeros_like(thresh_img)
+        if len(thresh_img.shape) > 2:
+            num_channels = thresh_img.shape[2]
+            roi_color = (255,) * num_channels
         else:
-            roiColor = 255
-        cv2.fillPoly(img=mask, pts=poly, color=roiColor)
-        roi = cv2.bitwise_and(src1=threshImage, src2=mask)
+            roi_color = 255
+        cv2.fillPoly(img=mask, pts=poly, color=roi_color)
+        roi = cv2.bitwise_and(src1=thresh_img, src2=mask)
         return roi
 
-    def _detect_edges(self, roi, cannyLow, cannyHigh, blurFirst):
-        if blurFirst == True:
+    def _detect_edges(self, roi, canny_low, canny_high, blur_first):
+        if blur_first == True:
             img = cv2.GaussianBlur(roi, (3, 3), 0)
-            img = cv2.Canny(img, cannyLow, cannyHigh)
+            img = cv2.Canny(img, canny_low, canny_high)
         else:
-            img = cv2.Canny(roi, cannyLow, cannyHigh)
+            img = cv2.Canny(roi, canny_low, canny_high)
             img = cv2.GaussianBlur(img, (3, 3), 0)
         return img
 
-    def _fit_lines(self, frame, edgeMap, rho, theta, thresh, minLength, maxGap):
-        lines = cv2.HoughLinesP(edgeMap, rho, theta, thresh, minLength, maxGap)
+    def _fit_lines(self, frame, edge_map, rho, theta, thresh, min_length, max_gap):
+        lines = cv2.HoughLinesP(edge_map, rho, theta, thresh, min_length, max_gap)
         hough = np.zeros((frame.shape[0], frame.shape[1], 3), dtype=np.uint8)
         self._draw_lines(hough, lines)
         return hough, lines
     
-    def _create_composite(self, frame ,lines, stroke, fill, poly, alpha, beta, gamma):
+    def _create_composite(self, frame, lines, stroke, fill, poly, alpha, beta, gamma):
         if lines is None:
             raise ValueError("Error: argument passed for lines contains no lines.")
         else:
