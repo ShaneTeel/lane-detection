@@ -4,6 +4,7 @@ import numpy as np
 import time
 import streamlit as st
 import streamlit_image_coordinates as img_xy
+from streamlit_extras.image_selector import image_selector
 from PIL import Image, ImageDraw
 import requests
 from functions import initialize_source
@@ -39,7 +40,7 @@ if 'pil' not in st.session_state:
     st.session_state['pil'] = None
 
 # Set title
-st.title("Traditional Lane Detection Walk-Through")
+st.title("Traditional Lane Detection (CannyHoughP)")
 
 # Create file upload button
 st.header("Source Management")
@@ -91,6 +92,16 @@ if st.session_state['file'] is not None:
             st.session_state['roi_window'] = st.empty()
             st.session_state['container_lst'].append(st.session_state['roi_window'])
         st.session_state['roi_window'].image(st.session_state['roi_frame'], channels='RGB')
+
+        # roi_selection = image_selector(st.session_state['roi_frame'], selection_type='box', key='roi_selection')
+
+        # if roi_selection and roi_selection.get("box"):
+        #     coords = roi_selection.get('box')
+        #     x_min = coords[0]['x'][0]
+        #     y_min = coords[0]['y'][0]
+        #     x_max = coords[0]['x'][1]
+        #     y_max = coords[0]['y'][1]
+            
         def add_point():
             raw_value = st.session_state['pil']
             value = raw_value['x'], raw_value['y']
@@ -155,7 +166,7 @@ if st.session_state['file'] is not None:
             configure = st.button("Configure Processor", type='secondary')
     if configure:
 
-        payload = {
+        processor_configs = {
             "configs": {
                 "in_range": {
                     "lower_bounds": lower_bounds, 
@@ -168,7 +179,7 @@ if st.session_state['file'] is not None:
                 },
                 "hough": {
                     "rho": rho, 
-                    "theta": theta, 
+                    "theta": np.pi / theta, 
                     "thresh": min_votes, 
                     "min_length": min_line_length, 
                     "max_gap": max_line_gap
@@ -181,11 +192,11 @@ if st.session_state['file'] is not None:
                 }
             }
         }
+        st.session_state["processor_configs"] = processor_configs
         with st.spinner("Configuring processor..."):
             try:
-                response = requests.post(f"{BACKEND_URL}/configure", json=payload)
-                response.raise_for_status()
-                st.success("Processor configured!")
+                with requests.post(f"{BACKEND_URL}/configure", json=processor_configs) as r:
+                    r.raise_for_status()
 
             except requests.exceptions.RequestException as e:
                 st.error(f"Error connecting to processing service: {str(e)}.")
@@ -201,26 +212,32 @@ if st.session_state['file'] is not None:
             st.subheader("Visual Inspection")
         with cols2A[1]:
             view_selection = st.segmented_control("Render Options", view_options)
-        run = st.button("Process Video")
+        cols2B = st.columns(2)
+        with cols2B[0]:
+            run = st.button("Process Video")
+        with cols2B[1]:
+            stop = st.button("Stop Feed", type='primary')
         if run and not view_selection:
-            st.error("You must select a viewing options prior to processing video.")
+            st.error("You must select a viewing option prior to processing video.")
         elif run and view_selection:
-            render_payload = {"configs": {'style': view_selection}}
-            with st.spinner("Streaming video..."):
-                try:
-                    window = st.empty()
-                    response = requests.post(f"{BACKEND_URL}/stream_video", json=render_payload)
-                    response.raise_for_status()
-                    arr = np.frombuffer(response.content, np.uint8)
-                    if arr is not None:
-                        win_frame = cv2.imdecode(arr, cv2.IMREAD_UNCHANGED)
-                        window.image(win_frame, channels='BGR')
-                except requests.exceptions.RequestException as e:
-                    st.error(f"Error streaming video {str(e)}")
-                    st.warning(f"Make sure backend service is running at {BACKEND_URL}.")
-        
+            stream_window = st.empty()
+            stream_url = f"{BACKEND_URL}/stream_video?timestamp={time.time()}&style={view_selection.replace(' ', '%20')}"
+            h, w = st.session_state['roi_frame'].shape[:2]
+            stream_window.markdown(
+                f"""
+                <img src="{stream_url}" style="width: 100%; height: 50%; border-radius: 7px; " />
+                """,
+                unsafe_allow_html=True,
+                width="content"
+            )
+            if stop: 
+                stream_window.empty()
+            
+            st.write(" ")
+
     with cols2[1]:
         st.subheader("Evaluation Report")
+        
 
     if release:
         st.session_state['reset'] = not st.session_state['reset']

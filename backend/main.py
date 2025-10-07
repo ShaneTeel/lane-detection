@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Response, File, UploadFile
+from fastapi import FastAPI, HTTPException, Response, File, UploadFile, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import cv2
@@ -16,18 +16,21 @@ class ProcessorConfigs(BaseModel):
     '''Input for processor'''
     configs: dict
 
-class StreamConfigs(BaseModel):
-    '''Input for processor'''
-    configs: dict
+class AppState:
 
-app_state = {
-    "source": None,
-    "processor": None,
-    "lock": asyncio.Lock()
-}
+    def __init__(self):
+        self.data = {}
 
-def get_source(key):
-    return app_state.get(key)
+    def add_item(self, key, value):
+        self.data[key] = value
+
+    def get_attr(self, key):
+        return self.data.get(key)
+    
+state = AppState()
+
+def get_state():
+    return state
 
 @app.get("/")
 def read_root():
@@ -41,7 +44,9 @@ def health_check():
 def create_source(file: UploadFile = File(...)):
     try:
         source = Read(file)
-        app_state['source'] = source
+        state.add_item("source", source)
+        render = Render()
+        state.add_item("render", render)
         ret, frame = source.return_frame()
         if not ret:
             error = f"Error: Could not read frame from {source.name}"
@@ -49,6 +54,7 @@ def create_source(file: UploadFile = File(...)):
         else:
             ret, im = cv2.imencode(".png", frame)
             return Response(im.tobytes(), media_type="image/png")
+        
 
     except Exception as e:
         print(f"Error occurred creating source object: {str(e)}")
@@ -58,42 +64,46 @@ def create_source(file: UploadFile = File(...)):
 def configure_processor(request: ProcessorConfigs):
     try:
         processor = CannyHoughP(request.configs)
-        app_state['processor'] = processor
+        state.add_item("processor", processor)
         
     except Exception as e:
         error = f"Error occured while processing frames: {str(e)}"
         raise HTTPException(status_code=500, detail=error)
 
-async def render_frame(style: str):
-    source = app_state.get('source')
-    processor = app_state.get('processor')
-    render = Render()
+async def render_frame(style: str, resource: AppState = state):
+    source = resource.get_attr('source')
+    processor = resource.get_attr('processor')
+    render = resource.get_attr('render')
+    current_frame = 0
+
     source.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+
+    frame_names = ["Threshold", "Edge Map", "Hough Lines", "Final Composite"]
 
     while True:
         ret1, raw = source.return_frame()
         if not ret1:
-            break
+            source.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            continue
 
-        thresh, edge, composite = processor.run(raw)
+        thresh, edge, hough, composite = processor.run(raw)
         if style == 'Step-by-Step':
-            frame = render._render_mosaic([raw, thresh, edge, composite])
+            frame = render.render_mosaic([thresh, edge, hough, composite], frame_names)
         else:
             frame = composite
-
-        ret2, buffer = cv2.imencode(".png", frame)
+        
+        ret2, buffer = cv2.imencode(".jpg", frame)
         if not ret2:
             continue
 
         yield (b'--frame\r\n'
                b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
         
-        await asyncio.sleep(0)  # hand control back to the event loop
+        await asyncio.sleep(0)
 
-@app.post("/stream_video")
-def stream_video(request: StreamConfigs):
+@app.get("/stream_video")
+def stream_video(style: str):
     try:
-        style = request.configs.get("style")
         return StreamingResponse(
             content=render_frame(style),
             media_type='multipart/x-mixed-replace; boundary=frame'
@@ -102,3 +112,32 @@ def stream_video(request: StreamConfigs):
     except Exception as e:
         error = f"Error occured while processing frames: {str(e)}"
         raise HTTPException(status_code=500, detail=error)
+    
+@app.get("/process_frame")
+def process_frame(style: str, idx: int):
+    resource = get_state()
+    source = resource.get_attr('source')
+    processor = resource.get_attr('processor')
+    render = resource.get_attr("render")
+    source.cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+
+    ret, raw = source.cap.read()
+
+    if not ret:
+        raise ValueError(f"Error: could not encode frame: {frame}")
+    frames = []
+    frames.append(processor.run(raw))
+    frame_names = ["Threshold", "Edge Map", "Hough Lines", "Final Composite"]
+    if style == 'Step-by-Step':
+        frame = render.render_mosaic(frames, frame_names)
+    else:
+        frame = frame[-1]
+    
+    ret2, buff = cv2.imencode(".png", frame)
+
+    if not ret2:
+        raise ValueError(f"Error: could not encode frame: {frame}")
+    
+    return Response(buff.tobytes(), media_type="image/png")
+
+

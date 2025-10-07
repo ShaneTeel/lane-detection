@@ -58,9 +58,9 @@ class CannyHoughP():
         threshold = self._threshold_lane_lines(frame, **self.in_range_params)
         roi = self._select_ROI(threshold, self.roi)
         edge_map = self._detect_edges(roi, **self.canny_params)
-        _, lines = self._fit_lines(frame, edge_map, **self.hough_params)
+        hough, lines = self._fit_lines(frame, edge_map, **self.hough_params)
         composite = self._create_composite(frame, lines, self.roi, **self.composite_params)
-        return threshold, edge_map, composite
+        return threshold, edge_map, hough, composite
             
     def _threshold_lane_lines(self, frame, lower_bounds, upper_bounds):
         img = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -90,7 +90,7 @@ class CannyHoughP():
     def _fit_lines(self, frame, edge_map, rho, theta, thresh, min_length, max_gap):
         lines = cv2.HoughLinesP(edge_map, rho, theta, thresh, min_length, max_gap)
         hough = np.zeros((frame.shape[0], frame.shape[1], 3), dtype=np.uint8)
-        self._draw_lines(hough, lines)
+        self._draw_lines(hough, lines, color=(255, 255, 255))
         return hough, lines
     
     def _create_composite(self, frame, lines, poly, stroke, stroke_color, fill, fill_color):
@@ -106,20 +106,6 @@ class CannyHoughP():
 
             img = cv2.addWeighted(frame, 0.8, canvas, 0.3, 0.0)
             return img
-    
-    def _draw_stroke_fill(self, img, lines, stroke, fill):
-        if lines is None:
-            raise ValueError("Error: argument passed for lines contains no lines.")
-        else:
-            if stroke:
-                self._draw_lines(img, [lines[0]], (0, 0, 255), 10)
-                self._draw_lines(img, [lines[1]], (0, 0, 255), 10)
-            if fill:
-                points = np.array([[*[[x1, y1] for x1, y1, _, _ in lines[0]],
-                                    *[[x2, y2] for _, _, x2, y2 in lines[0]],
-                                    *[[x2, y2] for _, _, x2, y2 in lines[1]],
-                                    *[[x1, y1] for x1, y1, _, _ in lines[1]]]], dtype='int32')
-                cv2.fillPoly(img=img, pts=points, color=(0, 255, 0))
     
     def _gen_line_of_best_fit(self, lanes, poly):
         yMin = min(poly[0][0][1], poly[0][-1][1])
@@ -186,14 +172,14 @@ class CannyHoughP():
             if fill:
                 self._draw_fill(img, lines, fill_color)
 
-    def _draw_fill(self, img, lines):
+    def _draw_fill(self, img, lines, color):
         points = np.array([[*[[x1, y1] for x1, y1, _, _ in lines[0]],
                             *[[x2, y2] for _, _, x2, y2 in lines[0]],
                             *[[x2, y2] for _, _, x2, y2 in lines[1]],
                             *[[x1, y1] for x1, y1, _, _ in lines[1]]]], dtype='int32')
-        cv2.fillPoly(img=img, pts=points, color=(0, 255, 0))
+        cv2.fillPoly(img=img, pts=points, color=color)
 
-    def _draw_lines(self, img, lines, color=(0, 0, 255), thickness=1):
+    def _draw_lines(self, img, lines, color, thickness=1):
         if lines is None:
             raise ValueError("Error: argument passed for lines contains no lines.")
         else:
