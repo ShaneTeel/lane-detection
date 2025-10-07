@@ -1,2 +1,2 @@
-from source import Read, Write
-from studio import Render
+from .studio import Render, Read, Write
+from .CannyHoughP import CannyHoughP

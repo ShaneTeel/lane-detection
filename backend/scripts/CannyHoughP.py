@@ -10,29 +10,45 @@ class CannyHoughP():
                 'in_range': {'lower_bounds': 150, 'upper_bounds': 255},
                 'canny': {'canny_low': 50, 'canny_high': 100, 'blur_first': False},
                 'hough': {'rho': 1, 'theta': np.pi / 180, 'thresh': 50, 'min_length': 10, 'max_gap': 20},
-                'composite': {'stroke': True, "stroke_color": (0, 0, 255), 'fill': True, "fill_color": (0, 255, 0), 'poly': _POLYGON, 'alpha': 0.8, 'beta': 0.3, 'gamma': 0.0},
-                'roi': {'poly': _POLYGON}
+                'composite': {'stroke': True, "stroke_color": (0, 0, 255), 'fill': True, "fill_color": (0, 255, 0)}
             }
 
     def __init__(self, configs):
         if configs is None:
             configs = self._DEFAULT_CONFIG
     
-        self.in_range_params = configs['threshold']
+        self.in_range_params = configs['in_range']
         self.canny_params = configs['canny']
         self.hough_params = configs['hough']
         self.composite_params = configs['composite']
-        self.roi = configs['roi']
+        self.roi = self._POLYGON
         self._validate_configs() # Validate configs
-    
+        self._hex_to_bgr('fill_color')
+        self._hex_to_bgr('stroke_color')
+
     def _validate_configs(self):
-        attributes = [self.in_range_params, self.canny_params, self.hough_params, self.composite_params, self.roi]
+        attributes = [self.in_range_params, self.canny_params, self.hough_params, self.composite_params]
         for i, step in enumerate(self._DEFAULT_CONFIG.keys()):
             parameters = [val for val in self._DEFAULT_CONFIG[step]]
             for param in parameters:
                     if param not in attributes[i]:
                         raise ValueError(f"Missing required threshold parameter: {param}")
-                    
+
+    def _hex_to_bgr(self, key):
+        hex_color = self.composite_params.get(key)
+        
+        if hex_color.startswith("#"):
+            hex_color = hex_color[1:]
+        
+        if len(hex_color) != 6:
+            raise ValueError("Invalid hex color code format. Expected six characters (remove alpha channel)")
+        
+        r = int(hex_color[0:2], 16)
+        g = int(hex_color[2:4], 16)
+        b = int(hex_color[4:6], 16)
+
+        self.composite_params[key] = (b, g, r)
+
         ####################################################
         # ADD VALIDATION FOR PARAMETER VALUE TYPE / RANGES #
         ####################################################
@@ -40,10 +56,10 @@ class CannyHoughP():
     def run(self, frame):
         '''ADD LATER'''
         threshold = self._threshold_lane_lines(frame, **self.in_range_params)
-        roi = self._select_ROI(threshold, **self.roi)
+        roi = self._select_ROI(threshold, self.roi)
         edge_map = self._detect_edges(roi, **self.canny_params)
         _, lines = self._fit_lines(frame, edge_map, **self.hough_params)
-        composite = self._create_composite(frame, lines, **self.composite_params)
+        composite = self._create_composite(frame, lines, self.roi, **self.composite_params)
         return threshold, edge_map, composite
             
     def _threshold_lane_lines(self, frame, lower_bounds, upper_bounds):
@@ -77,17 +93,18 @@ class CannyHoughP():
         self._draw_lines(hough, lines)
         return hough, lines
     
-    def _create_composite(self, frame, lines, stroke, fill, poly, alpha, beta, gamma):
+    def _create_composite(self, frame, lines, poly, stroke, stroke_color, fill, fill_color):
         if lines is None:
+            print(lines)
             raise ValueError("Error: argument passed for lines contains no lines.")
         else:
             lanes_classified = self._classify_lines(lines)
             lane_lines = self._gen_line_of_best_fit(lanes_classified, poly)
 
             canvas = np.zeros([frame.shape[0], frame.shape[1], 3], dtype=np.uint8)
-            self._draw_stroke_fill(canvas, lane_lines, stroke, fill)
+            self._draw_stroke_fill(canvas, lane_lines, stroke, stroke_color, fill, fill_color)
 
-            img = cv2.addWeighted(frame, alpha, canvas, beta, gamma)
+            img = cv2.addWeighted(frame, 0.8, canvas, 0.3, 0.0)
             return img
     
     def _draw_stroke_fill(self, img, lines, stroke, fill):
@@ -159,15 +176,15 @@ class CannyHoughP():
                 n = 1
             return sum(values) / n
 
-    def _draw_stroke_fill(self, img, lines, stroke, fill):
+    def _draw_stroke_fill(self, img, lines, stroke, stroke_color, fill, fill_color):
         if lines is None:
             raise ValueError("Error: argument passed for lines contains no lines.")
         else:
             if stroke:
-                self._draw_lines(img, [lines[0]], (0, 0, 255), 10)
-                self._draw_lines(img, [lines[1]], (0, 0, 255), 10)
+                self._draw_lines(img, [lines[0]], stroke_color, 10)
+                self._draw_lines(img, [lines[1]], stroke_color, 10)
             if fill:
-                self._draw_fill(img, lines)
+                self._draw_fill(img, lines, fill_color)
 
     def _draw_fill(self, img, lines):
         points = np.array([[*[[x1, y1] for x1, y1, _, _ in lines[0]],

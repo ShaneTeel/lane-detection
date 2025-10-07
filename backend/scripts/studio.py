@@ -1,64 +1,12 @@
 import cv2
 import numpy as np
+import os
+import io
+import base64
+import shutil
+import tempfile
 
-class Render():
-
-    def __init__(self, source_object):
-
-        self.source = source_object
-        self.current_frame = 0
-
-    def single_panel(self, processor = None):
-        while True:
-            ret, frame = self.source.return_frame()
-            if ret:
-                if processor is not None:
-                    _, _, frame = processor.run(frame)
-                
-                self.source.
-                    
-            else:
-                break  
-
-    def create_mosaic(self, containers, processor):
-        self._create_playback_options()
-        while True and not self.exit:
-            ret, raw = self.source.return_frame()
-            if ret:
-                thresh, edge_map, composite = processor.run(raw)
-                frame = self._render_mosaic([raw, thresh, edge_map, composite])
-
-                containers.image(frame, channels='BGR', use_container_width=True)
-                self.current_frame += 1
-            else:
-                self.source.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-
-    def create_finished(self, containers, processor):
-        self._create_playback_options()
-        while True and not self.exit:
-            ret, raw = self.source.return_frame()
-            if ret:
-                _, _, composite = processor.run(raw)
-
-                containers.image(composite, channels='BGR', use_container_width=True)
-                self.current_frame += 1
-            else:
-                self.source.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-
-class Render():
-    def __init__(self):
-
-        pass
-
-    def single_frame(self, frame, processor = None):
-        while True:
-            ret, raw = self.source.return_frame()
-            if ret:
-                cv2.waitKey(self.source.fps)
-                self.current_frame += 1
-            else:
-                self.source.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  
-        pass
+class Render:
 
     def _render_diptych(self, frames):
         frames = [self._channel_checker(frame) for frame in frames]
@@ -81,3 +29,88 @@ class Render():
             return cv2.merge([frame, frame, frame])
         else:
             return frame
+
+class Read():
+
+    def __init__(self, source):
+        self.source = source
+        self.name = None
+        self.temp_file_path = None
+        self.ext = None
+        self.cap = None
+        self.width = None
+        self.height = None
+        self.fps = None
+        self.frame_count = None
+
+        self._initialize_source()
+
+    def return_frame(self):
+        if self.cap is None:
+            return False, None
+
+        ret, frame = self.cap.read()
+        if ret:
+            return True, frame
+        else:
+            return False, None
+
+    def _initialize_source(self):
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as temp_file:
+            try:
+                shutil.copyfileobj(self.source.file, temp_file)
+                self.temp_file_path = temp_file.name
+            finally:
+                self.source.file.close()
+        self.cap = cv2.VideoCapture(self.temp_file_path)
+
+        if not self.cap.isOpened():
+            raise ValueError(f"Error: Failed to open {self.name} video.")
+
+        else:       
+            self.width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            self.height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            self.fps = int(self.cap.get(cv2.CAP_PROP_FPS))
+            self.frame_count = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            self.name, self.ext = os.path.splitext(os.path.basename(self.source.filename))
+
+    # def _clean_up(self):
+    #     if self.cap is not None:
+    #         self.cap.release()
+    #         self.cap = None
+
+    # def __del__(self):
+    #     self._clean_up()
+    #     os.unlink(self.temp_file_path)
+
+class Write():
+    def __init__(self, file_out_name, ext, width, heigth, fps):
+        self.file_out_name = file_out_name
+        self.ext = ext
+        self.width = width
+        self.height = heigth
+        self.fps = fps
+        self.writer = None
+        
+        self._initialize_writer()
+    
+    # Create file download button
+    def get_download_link(file, file_name, text):
+        buffered = io.BytesIO()
+        file.save(buffered, format='mp4')
+        file_str = base64.b64encode(buffered.getvalue()).decode()
+        href = f"<a href='data:file/txt;base64,{file_str}' download='{file_name}'>{text}</a>"
+        return href
+
+    def _initialize_writer(self):
+        self.file_out_name += self.ext
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        self.writer = cv2.VideoWriter(self.file_out_name, fourcc, self.fps, (self.width, self.height))
+    
+    def _clean_up(self):
+        if self.writer is not None:
+            self.writer.release()
+            self.writer = None
+    
+    def __del__(self):
+        self._clean_up()
