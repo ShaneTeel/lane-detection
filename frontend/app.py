@@ -1,13 +1,13 @@
 import cv2
 import os
 import numpy as np
+import pandas as pd
+import base64
 import time
 import streamlit as st
-import streamlit_image_coordinates as img_xy
-from streamlit_extras.image_selector import image_selector
+from streamlit_image_coordinates import streamlit_image_coordinates as img_xy
 from PIL import Image, ImageDraw
 import requests
-from functions import initialize_source
 
 BACKEND_URL = os.environ.get("BACKEND_URL", "http://127.0.0.1:8000")
 
@@ -24,20 +24,18 @@ if 'container_lst' not in st.session_state:
 # Source Attributes
 if 'file' not in st.session_state:
     st.session_state['file'] = None
-if 'source_response' not in st.session_state:
-    st.session_state['source_response'] = None
 
 # ROI Attributes
 if 'roi_window' not in st.session_state:
     st.session_state['roi_window'] = None
 if 'roi_frame' not in st.session_state:
     st.session_state['roi_frame'] = None
-if 'roi_points' not in st.session_state:
-    st.session_state['roi_points'] = []
-if 'roi_canvas' not in st.session_state:
-    st.session_state['roi_canvas'] = None
-if 'pil' not in st.session_state:
-    st.session_state['pil'] = None
+if 'point' not in st.session_state:
+    st.session_state['points'] = None
+if 'click_points' not in st.session_state:
+    st.session_state['click_points'] = []
+if 'roi_poly' not in st.session_state:
+    st.session_state['roi_poly'] = None
 
 # Set title
 st.title("Traditional Lane Detection (CannyHoughP)")
@@ -67,7 +65,11 @@ if uploaded_file is not None and uploaded_file != st.session_state['file']:
         arr = np.frombuffer(response.content, np.uint8)
         if arr is not None:
             roi_frame = cv2.imdecode(arr, cv2.IMREAD_UNCHANGED)
-            st.session_state['source_response'] = roi_frame
+            if roi_frame is not None and roi_frame.size > 0:
+                rgb_img = Image.fromarray(cv2.cvtColor(roi_frame, cv2.COLOR_BGR2RGB))
+                st.session_state['roi_frame'] = rgb_img
+            else:
+                st.error(f"Error: Image return from server is none type object or of shape 0.")
         else:
             st.error(f"Error: server failed to read frame from source.")
     except requests.exceptions.RequestException as e:
@@ -84,30 +86,45 @@ if st.session_state['file'] is not None:
         st.markdown("**Move cursor over image and right-click at four different points on the image.**")
         st.write("**The ROI is the area of the frame that the Lane Detection model is run against.*")
         # Create ROI Window
-        if st.session_state['roi_frame'] is None:
-            roi_frame_rgb = cv2.cvtColor(st.session_state['source_response'], cv2.COLOR_BGR2RGB)
-            pil_img = Image.fromarray(roi_frame_rgb)
-            st.session_state['roi_frame'] = roi_frame_rgb
         if st.session_state['roi_window'] is None:
             st.session_state['roi_window'] = st.empty()
             st.session_state['container_lst'].append(st.session_state['roi_window'])
-        st.session_state['roi_window'].image(st.session_state['roi_frame'], channels='RGB')
+        
+        # Create writeable ROI Frame
+        if st.session_state.get("roi_frame") is not None:
+            try:
+                roi_img = st.session_state.get("roi_frame")
+                w, h = roi_img.size
+                
+                draw = ImageDraw.Draw(roi_img)
 
-        # roi_selection = image_selector(st.session_state['roi_frame'], selection_type='box', key='roi_selection')
+                def add_point():
+                    if len(st.session_state['click_points']) == 4:
+                        return
+                    else:
+                        raw = st.session_state['point']
+                        point = raw['x'], raw['y']
+                        st.session_state['click_points'].append(point)
 
-        # if roi_selection and roi_selection.get("box"):
-        #     coords = roi_selection.get('box')
-        #     x_min = coords[0]['x'][0]
-        #     y_min = coords[0]['y'][0]
-        #     x_max = coords[0]['x'][1]
-        #     y_max = coords[0]['y'][1]
-            
-        def add_point():
-            raw_value = st.session_state['pil']
-            value = raw_value['x'], raw_value['y']
-            st.session_state['roi_points'].append(value)
-        # for point in st.session_state['roi_points']:
-        #     coords = 
+                value = img_xy(roi_img, key='point', on_click=add_point, cursor='crosshair')
+
+                if len(st.session_state['click_points']) == 4:
+                    points = st.session_state.get('click_points')
+                    roi_payload = {"points": points}
+                    try:
+                        response = requests.post(f"{BACKEND_URL}/roi", json=roi_payload)
+                        response.raise_for_status()
+                        poly_lst = response.json().get("poly")
+                        poly = [(x, y) for x, y in [point for point in points]]
+                        st.session_state['roi_poly'] = poly
+                        draw.polygon(poly, outline=(255, 255, 0), width=5)
+
+                    except Exception as e:
+                        st.write(f"Error: Failed to process ROI {str(e)}")
+
+            except Exception as e:
+                st.error(f"Error preparing img_xy: {str(e)}")
+
 
     with cols1[1]:
         st.subheader("Set Parameters")
@@ -116,6 +133,13 @@ if st.session_state['file'] is not None:
         cols1A = st.columns(2)
         with cols1A[0]:
             st.markdown("**Selected ROI**")
+            if st.session_state['roi_poly'] is not None:
+                names = ["Top-Left", "Top-Right", "Bottom-Right", "Bottom-Left"]
+                roi_poly = st.session_state.get("roi_poly")
+                roi_poly = {name: point for name, point in zip(names, points)}
+                df = pd.DataFrame(roi_poly)
+                df.index = ["x", "y"]
+                st.table(df, border='horizontal')
 
         # Thresholding Input (cv2.inRange())
         with cols1A[1]:
@@ -134,7 +158,7 @@ if st.session_state['file'] is not None:
         st.markdown("**Probabilistic Hough Line Transform**")
         cols1C = st.columns(5)
         with cols1C[0]:
-            w, h, = st.session_state['roi_frame'].shape[:2]
+            w, h, = st.session_state['roi_frame'].size
             diag = (w**2 + h**2)**0.5
             area = w * h
             rho = st.number_input("Rho (ρ)", min_value=0.1, max_value=diag, value=1.0)
@@ -167,7 +191,6 @@ if st.session_state['file'] is not None:
     if configure:
 
         processor_configs = {
-            "configs": {
                 "in_range": {
                     "lower_bounds": lower_bounds, 
                     "upper_bounds": upper_bounds
@@ -185,13 +208,13 @@ if st.session_state['file'] is not None:
                     "max_gap": max_line_gap
                 },
                 "composite": {
-                    "stroke": stroke_bool, 
-                    "stroke_color": stroke_color if stroke_bool else None,
-                    "fill": fill_bool,
-                    "fill_color": fill_color if fill_bool else None
+            
+                    "stroke": True if stroke_bool else False, 
+                    "stroke_color": stroke_color if stroke_bool else "#FFFFFF",
+                    "fill": True if fill_bool else False,
+                    "fill_color": fill_color if fill_bool else "#FFFFFF"
                 }
             }
-        }
         st.session_state["processor_configs"] = processor_configs
         with st.spinner("Configuring processor..."):
             try:
@@ -222,10 +245,10 @@ if st.session_state['file'] is not None:
         elif run and view_selection:
             stream_window = st.empty()
             stream_url = f"{BACKEND_URL}/stream_video?timestamp={time.time()}&style={view_selection.replace(' ', '%20')}"
-            h, w = st.session_state['roi_frame'].shape[:2]
+            w, h = st.session_state['roi_frame'].size
             stream_window.markdown(
                 f"""
-                <img src="{stream_url}" style="width: 100%; height: 50%; border-radius: 7px; " />
+                <img src="{stream_url}" style="width: 100%; height: 100%;" />
                 """,
                 unsafe_allow_html=True,
                 width="content"

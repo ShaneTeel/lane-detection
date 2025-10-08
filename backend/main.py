@@ -1,6 +1,8 @@
 from fastapi import FastAPI, HTTPException, Response, File, UploadFile, Depends
+from typing import List
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+import base64
 import cv2
 import numpy as np
 import os
@@ -11,10 +13,6 @@ from scripts.studio import Render, Read, Write
 from scripts.CannyHoughP import CannyHoughP
 
 app = FastAPI()
-
-class ProcessorConfigs(BaseModel):
-    '''Input for processor'''
-    configs: dict
 
 class AppState:
 
@@ -52,18 +50,52 @@ def create_source(file: UploadFile = File(...)):
             error = f"Error: Could not read frame from {source.name}"
             raise HTTPException(status_code=500, detail=error)
         else:
-            ret, im = cv2.imencode(".png", frame)
-            return Response(im.tobytes(), media_type="image/png")
+            ret, im = cv2.imencode(".jpeg", frame)
+            return Response(im.tobytes(), media_type="image/jpeg")
         
 
     except Exception as e:
         print(f"Error occurred creating source object: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/roi")
+def define_roi(request: dict):
+    points = request.get('points')
+    top = min(*[y for _, y in [point for point in points]])
+    bottom = max(*[y for _, y in [point for point in points]])
+    mid_y = sum([top, bottom]) // 2
+
+    left = min(*[x for x, _ in [point for point in points]])
+    right = max(*[x for x, _ in [point for point in points]])
+    mid_x = sum([left, right]) // 2
     
+    roi = ['TL',
+           'TR',
+           'BR',
+           'BL',
+           'TL']
+    
+    for point in points:
+        x, y = point
+        if x < mid_x and y < mid_y:
+            roi[0] = point
+            roi[-1] = point
+        elif x > mid_x and y < mid_y:
+            roi[1] = point
+        elif x > mid_x and y > mid_y:
+            roi[2] = point
+        elif x < mid_x and y > mid_y:
+            roi[3] = point
+
+    state.add_item("roi", roi)
+
+    return {"poly": roi[:4]}
+
 @app.post("/configure")
-def configure_processor(request: ProcessorConfigs):
+def configure_processor(request: dict):
     try:
-        processor = CannyHoughP(request.configs)
+        print("Trying")
+        processor = CannyHoughP(request)
         state.add_item("processor", processor)
         
     except Exception as e:
@@ -74,7 +106,6 @@ async def render_frame(style: str, resource: AppState = state):
     source = resource.get_attr('source')
     processor = resource.get_attr('processor')
     render = resource.get_attr('render')
-    current_frame = 0
 
     source.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
