@@ -8,7 +8,7 @@ class CannyKMeans():
     _POLYGON = np.array([[[100, 540], [900, 540], [515, 320], [450, 320]]])
     _DEFAULT_CONFIG = {
                 'in_range': {'lower_bounds': 150, 'upper_bounds': 255},
-                'canny': {'canny_low': 50, 'canny_high': 100, 'blur_first': False},
+                'canny': {'canny_low': 50, 'canny_high': 100, 'blur_first': True},
                 'composite': {'stroke': True, "stroke_color": (0, 0, 255), 'fill': True, "fill_color": (0, 255, 0)}
             }
 
@@ -66,7 +66,7 @@ class CannyKMeans():
         roi = self._select_ROI(threshold, self.roi)
         edge_map = self._detect_edges(roi, **self.canny_params)
         composite = self._create_composite(frame, edge_map, self._POLYGON, **self.composite_params)
-        return composite
+        return threshold, edge_map, composite
 
     def _threshold_lane_lines(self, frame, lower_bounds, upper_bounds):
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -174,20 +174,29 @@ class CannyKMeans():
 
 if __name__ == "__main__":
 
-    cap = cv2.VideoCapture("../../media/lane1-straight.mp4")
+    cap = cv2.VideoCapture("media/lane1-straight.mp4")
 
     if not cap.isOpened():
         print("Error: Could not open video.")
 
     processor = CannyKMeans()
+    pause = False
 
-    while True:
+    while True and not pause:
         ret, frame = cap.read()
         if not ret:
             break
         else:
-            composite = processor.run(frame)
-            cv2.imshow("test", composite)
-            cv2.waitKey(1)
+            thresh, edge, composite = processor.run(frame)
+            thresh = cv2.merge([thresh, thresh, thresh])
+            edge = cv2.merge([edge, edge, edge])
+            top = np.hstack([frame, thresh])
+            bottom = np.hstack([edge, composite])
+            combined = np.vstack([top, bottom])
+
+            cv2.imshow("test", combined)
+            key = cv2.waitKey(1)
+            if key == 27 or key == 32:
+                break
     
     cv2.destroyAllWindows()
