@@ -1,16 +1,10 @@
-from fastapi import FastAPI, HTTPException, Response, File, UploadFile, Depends
-from typing import List
+from fastapi import FastAPI, HTTPException, Response, File, UploadFile
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
-import base64
 import cv2
-import numpy as np
-import os
 import asyncio
-import uvicorn
-from typing import List, Dict
 from scripts.studio import Render, Read, Write
 from scripts.CannyHoughP import CannyHoughP
+from scripts.CurvedLine import CannyKCluster
 
 app = FastAPI()
 
@@ -21,6 +15,8 @@ class AppState:
         self.processor = None
         self.source = None
         self.render = Render()
+        self.writer = None
+        self.play_flag = None
 
     def add_item(self, key, value):
         self.data[key] = value
@@ -29,9 +25,6 @@ class AppState:
         return self.data.get(key)
     
 state = AppState()
-
-def get_state():
-    return state
 
 @app.get("/")
 def read_root():
@@ -46,6 +39,10 @@ def create_source(file: UploadFile = File(...)):
     try:
         source = Read(file)
         state.source = source
+
+        writer = Write(source.name, '.mp4', source.width, source.height, source.fps)
+        state.writer = writer
+
         ret, frame = source.return_frame()
         if not ret:
             error = f"Error: Could not read frame from {source.name}"
@@ -53,7 +50,6 @@ def create_source(file: UploadFile = File(...)):
         else:
             ret, im = cv2.imencode(".jpeg", frame)
             return Response(im.tobytes(), media_type="image/jpeg")
-        
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -84,9 +80,8 @@ def define_roi(request: dict):
         elif x < mid_x and y > mid_y:
             roi[3] = point if method == 'original' else (x, bottom)
 
-
     state.roi = roi
-    
+
     return {"poly": roi}
 
 @app.post("/configure")
@@ -100,12 +95,12 @@ def configure_processor(request: dict):
         raise HTTPException(status_code=500, detail=error)
 
 async def render_frame(style: str, state: AppState = state):
-
+    state.play_flag = True
     state.source.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
     frame_names = ["Threshold", "Edge Map", "Hough Lines", "Final Composite"]
 
-    while True:
+    while state.play_flag:
         ret1, raw = state.source.return_frame()
         if not ret1:
             state.source.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
@@ -138,31 +133,13 @@ def stream_video(style: str):
         error = f"Error occured while processing frames: {str(e)}"
         raise HTTPException(status_code=500, detail=error)
     
-@app.get("/process_frame")
-def process_frame(style: str, idx: int):
-    resource = get_state()
-    source = resource.get_attr('source')
-    processor = resource.get_attr('processor')
-    render = resource.get_attr("render")
-    source.cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
-
-    ret, raw = source.cap.read()
-
-    if not ret:
-        raise ValueError(f"Error: could not encode frame: {frame}")
-    frames = []
-    frames.append(processor.run(raw))
-    frame_names = ["Threshold", "Edge Map", "Hough Lines", "Final Composite"]
-    if style == 'Step-by-Step':
-        frame = render.render_mosaic(frames, frame_names)
-    else:
-        frame = frame[-1]
+@app.post("/stop_video")
+def stop_video():
+    try:
+        state.play_flag = False
+        return {'status': 'stopped'}
+        
+    except Exception as e:
+        error = f"Error occured while processing frames: {str(e)}"
+        raise HTTPException(status_code=500, detail=error)
     
-    ret2, buff = cv2.imencode(".png", frame)
-
-    if not ret2:
-        raise ValueError(f"Error: could not encode frame: {frame}")
-    
-    return Response(buff.tobytes(), media_type="image/png")
-
-

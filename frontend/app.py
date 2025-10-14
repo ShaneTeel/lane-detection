@@ -267,7 +267,7 @@ if st.session_state['file'] is not None:
         with cols2B[0]:
             run = st.button("Process Video")
         with cols2B[1]:
-            stop = st.button("Stop Feed", type='primary')
+            stop = st.button("Stop", type='primary')
         if run and not view_selection:
             st.error("You must select a viewing option prior to processing video.")
         elif run and view_selection:
@@ -281,9 +281,13 @@ if st.session_state['file'] is not None:
                 unsafe_allow_html=True,
                 width="content"
             )
-            if stop: 
-                stream_window.empty()
-            
+        if stop:
+            try:
+                r = requests.post(f"{BACKEND_URL}/stop_video", json=False)
+            except requests.exceptions.RequestException as e:
+                st.error(f"Error connecting to streaming service: {str(e)}.")
+                st.warning(f"Make sure backend service is running at {BACKEND_URL}.")  
+
             st.write(" ")
 
     with cols2[1]:

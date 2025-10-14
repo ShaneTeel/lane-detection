@@ -3,7 +3,7 @@ import numpy as np
 import math
 import streamlit as st
 
-class CannyHoughP():
+class CannyKCluster():
     '''Test'''
     _POLYGON = np.array([[[100, 540], [900, 540], [515, 320], [450, 320]]])
     _DEFAULT_CONFIG = {
@@ -64,7 +64,6 @@ class CannyHoughP():
         threshold = self._threshold_lane_lines(frame, **self.in_range_params)
         roi = self._select_ROI(threshold, self.roi)
         edge_map = self._detect_edges(roi, **self.canny_params)
-        self._classify_lines2(edge_map)
         hough, lines = self._fit_lines(frame, edge_map, **self.hough_params)
         if lines is None:
             return threshold, edge_map, hough, frame
@@ -147,11 +146,6 @@ class CannyHoughP():
                     lanes['right']['m'].append(m) 
                     lanes['right']['b'].append(b)
         return lanes
-    
-    def _classify_lines2(self, edge_map):
-        edge_pts = np.where(edge_map == 255)
-        pts = np.column_stack((edge_pts[1], edge_pts[0]))
-        print(pts)
 
     def _calc_slope_intercept(self, line):
         if line is None:
