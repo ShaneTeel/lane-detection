@@ -17,7 +17,10 @@ app = FastAPI()
 class AppState:
 
     def __init__(self):
-        self.data = {}
+        self.roi = None
+        self.processor = None
+        self.source = None
+        self.render = Render()
 
     def add_item(self, key, value):
         self.data[key] = value
@@ -42,9 +45,7 @@ def health_check():
 def create_source(file: UploadFile = File(...)):
     try:
         source = Read(file)
-        state.add_item("source", source)
-        render = Render()
-        state.add_item("render", render)
+        state.source = source
         ret, frame = source.return_frame()
         if not ret:
             error = f"Error: Could not read frame from {source.name}"
@@ -55,12 +56,13 @@ def create_source(file: UploadFile = File(...)):
         
 
     except Exception as e:
-        print(f"Error occurred creating source object: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/roi")
 def define_roi(request: dict):
-    points = request.get('points')
+    points = request.get("points")
+    method = request.get("method")
+
     top = min(*[y for _, y in [point for point in points]])
     bottom = max(*[y for _, y in [point for point in points]])
     mid_y = sum([top, bottom]) // 2
@@ -68,58 +70,50 @@ def define_roi(request: dict):
     left = min(*[x for x, _ in [point for point in points]])
     right = max(*[x for x, _ in [point for point in points]])
     mid_x = sum([left, right]) // 2
-    
-    roi = ['TL',
-           'TR',
-           'BR',
-           'BL',
-           'TL']
+
+    roi = [1, 2, 3, 4]
     
     for point in points:
         x, y = point
         if x < mid_x and y < mid_y:
-            roi[0] = point
-            roi[-1] = point
+            roi[0] = point if method == 'original' else (x, top)
         elif x > mid_x and y < mid_y:
-            roi[1] = point
+            roi[1] = point if method == 'original' else (x, top)
         elif x > mid_x and y > mid_y:
-            roi[2] = point
+            roi[2] = point if method == 'original' else (x, bottom)
         elif x < mid_x and y > mid_y:
-            roi[3] = point
+            roi[3] = point if method == 'original' else (x, bottom)
 
-    state.add_item("roi", roi)
 
-    return {"poly": roi[:4]}
+    state.roi = roi
+    
+    return {"poly": roi}
 
 @app.post("/configure")
 def configure_processor(request: dict):
     try:
-        print("Trying")
-        processor = CannyHoughP(request)
-        state.add_item("processor", processor)
+        processor = CannyHoughP(state.roi, request)
+        state.processor = processor
         
     except Exception as e:
         error = f"Error occured while processing frames: {str(e)}"
         raise HTTPException(status_code=500, detail=error)
 
-async def render_frame(style: str, resource: AppState = state):
-    source = resource.get_attr('source')
-    processor = resource.get_attr('processor')
-    render = resource.get_attr('render')
+async def render_frame(style: str, state: AppState = state):
 
-    source.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+    state.source.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
     frame_names = ["Threshold", "Edge Map", "Hough Lines", "Final Composite"]
 
     while True:
-        ret1, raw = source.return_frame()
+        ret1, raw = state.source.return_frame()
         if not ret1:
-            source.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            state.source.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
             continue
 
-        thresh, edge, hough, composite = processor.run(raw)
+        thresh, edge, hough, composite = state.processor.run(raw)
         if style == 'Step-by-Step':
-            frame = render.render_mosaic([thresh, edge, hough, composite], frame_names)
+            frame = state.render.render_mosaic([thresh, edge, hough, composite], frame_names)
         else:
             frame = composite
         

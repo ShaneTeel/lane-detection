@@ -11,6 +11,14 @@ import requests
 
 BACKEND_URL = os.environ.get("BACKEND_URL", "http://127.0.0.1:8000")
 
+# Helper Funcs
+def add_point():
+    if len(st.session_state['click_points']) == 4:
+        return
+    else:
+        raw = st.session_state['point']
+        point = raw['x'], raw['y']
+        st.session_state['click_points'].append(point)
 
 # Page Layout
 st.set_page_config(layout='wide')
@@ -36,6 +44,10 @@ if 'click_points' not in st.session_state:
     st.session_state['click_points'] = []
 if 'roi_poly' not in st.session_state:
     st.session_state['roi_poly'] = None
+if 'roi_rerun' not in st.session_state:
+    st.session_state['roi_rerun'] = False
+if 'poly_img' not in st.session_state:
+    st.session_state['poly_img'] = None
 
 # Set title
 st.title("Traditional Lane Detection (CannyHoughP)")
@@ -54,7 +66,7 @@ with cols0[1]:
 
 st.divider()
 
-# Verify and Read Uploaded File; Initialize Capture Object 
+# File Upload Block 
 if uploaded_file is not None and uploaded_file != st.session_state['file']:
     st.spinner("Initializing capture object...")
     st.session_state['file'] = uploaded_file
@@ -64,9 +76,9 @@ if uploaded_file is not None and uploaded_file != st.session_state['file']:
         response.raise_for_status()
         arr = np.frombuffer(response.content, np.uint8)
         if arr is not None:
-            roi_frame = cv2.imdecode(arr, cv2.IMREAD_UNCHANGED)
-            if roi_frame is not None and roi_frame.size > 0:
-                rgb_img = Image.fromarray(cv2.cvtColor(roi_frame, cv2.COLOR_BGR2RGB))
+            frame = cv2.imdecode(arr, cv2.IMREAD_UNCHANGED)
+            if frame is not None and frame.size > 0:
+                rgb_img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
                 st.session_state['roi_frame'] = rgb_img
             else:
                 st.error(f"Error: Image return from server is none type object or of shape 0.")
@@ -76,15 +88,23 @@ if uploaded_file is not None and uploaded_file != st.session_state['file']:
         st.error(f"Error connecting to intialization service: {str(e)}.")
         st.warning(f"Make sure backend service is running at {BACKEND_URL}.")
 
+# Model Configuration Block
 if st.session_state['file'] is not None:
     st.header("Step 1: Configure Model")
     cols1 = st.columns(2, border=True)
 
-    # ROI Selection
+    # ROI Sub-Block
     with cols1[0]:
-        st.subheader("Select a Region of Interest* (ROI)")
-        st.markdown("**Move cursor over image and right-click at four different points on the image.**")
-        st.write("**The ROI is the area of the frame that the Lane Detection model is run against.*")
+        cols1P = st.columns([9, 1])
+
+        with cols1P[0]:
+            st.subheader("Select a Region of Interest* (ROI)")
+            st.markdown("**Move cursor over image and right-click at four different points on the image.**")
+            st.write("**The ROI is the area of the frame that the Lane Detection model is run against.*")
+        with cols1P[1]:
+            st.write(" ")
+            reset = st.button("Reset", type='primary')
+
         # Create ROI Window
         if st.session_state['roi_window'] is None:
             st.session_state['roi_window'] = st.empty()
@@ -93,39 +113,47 @@ if st.session_state['file'] is not None:
         # Create writeable ROI Frame
         if st.session_state.get("roi_frame") is not None:
             try:
-                roi_img = st.session_state.get("roi_frame")
-                w, h = roi_img.size
+                if st.session_state['poly_img'] is None:
+                    poly_img = st.session_state.get("roi_frame")
+                    w, h = poly_img.size
+                    st.session_state['poly_img'] = poly_img.copy()
                 
-                draw = ImageDraw.Draw(roi_img)
+                img_draw = st.session_state.get("poly_img")
 
-                def add_point():
-                    if len(st.session_state['click_points']) == 4:
-                        return
-                    else:
-                        raw = st.session_state['point']
-                        point = raw['x'], raw['y']
-                        st.session_state['click_points'].append(point)
+                draw = ImageDraw.Draw(img_draw)
 
-                value = img_xy(roi_img, key='point', on_click=add_point, cursor='crosshair')
+                value = img_xy(img_draw, key='point', on_click=add_point, cursor='crosshair')
 
                 if len(st.session_state['click_points']) == 4:
                     points = st.session_state.get('click_points')
-                    roi_payload = {"points": points}
+                    roi_payload = {"points": points, "method": "original"}
                     try:
                         response = requests.post(f"{BACKEND_URL}/roi", json=roi_payload)
                         response.raise_for_status()
                         poly_lst = response.json().get("poly")
-                        poly = [(x, y) for x, y in [point for point in points]]
-                        st.session_state['roi_poly'] = poly
-                        draw.polygon(poly, outline=(255, 255, 0), width=5)
+                        orig_poly = [(x, y) for x, y in [point for point in poly_lst]]
+                        st.session_state['roi_poly'] = orig_poly
+                        draw.polygon(orig_poly, outline=(255, 255, 0), width=5)
+                        if not st.session_state['roi_rerun']:
+                            st.session_state['roi_rerun'] = True
+                            st.rerun()
+                        
+                    except requests.exceptions.RequestException as e:
+                        st.error(f"Error connecting to Original ROI service: {str(e)}")
+                        st.warning(f"Make sure backend service is running at {BACKEND_URL}.")
 
-                    except Exception as e:
-                        st.write(f"Error: Failed to process ROI {str(e)}")
+                if reset:
+                    st.session_state['click_points'].clear()
+                    st.session_state['roi_poly'] = None
+                    st.session_state['poly_img'] = st.session_state['roi_frame'].copy()
+                    if st.session_state['roi_rerun']:
+                        st.session_state['roi_rerun'] = False
+                        st.rerun()
 
             except Exception as e:
-                st.error(f"Error preparing img_xy: {str(e)}")
+                st.error(f"Error preparing image coordinates: {str(e)}")
 
-
+    # Parameter Block
     with cols1[1]:
         st.subheader("Set Parameters")
 
