@@ -1,19 +1,18 @@
 import cv2
 import numpy as np
 import math
-import streamlit as st
+from sklearn.cluster import KMeans
 
-class CannyKCluster():
+class CannyKMeans():
     '''Test'''
     _POLYGON = np.array([[[100, 540], [900, 540], [515, 320], [450, 320]]])
     _DEFAULT_CONFIG = {
                 'in_range': {'lower_bounds': 150, 'upper_bounds': 255},
                 'canny': {'canny_low': 50, 'canny_high': 100, 'blur_first': False},
-                'hough': {'rho': 1, 'theta': np.pi / 180, 'thresh': 50, 'min_length': 10, 'max_gap': 20},
                 'composite': {'stroke': True, "stroke_color": (0, 0, 255), 'fill': True, "fill_color": (0, 255, 0)}
             }
 
-    def __init__(self, roi, configs):
+    def __init__(self, roi = None, configs = None):
         if configs is None:
             configs = self._DEFAULT_CONFIG
         
@@ -23,15 +22,15 @@ class CannyKCluster():
             roi = self._POLYGON
         self.in_range_params = configs['in_range']
         self.canny_params = configs['canny']
-        self.hough_params = configs['hough']
         self.composite_params = configs['composite']
         self.roi = roi
+        self.kmeans = KMeans(2, random_state=42)
         self._validate_configs() # Validate configs
         self._hex_to_bgr('fill_color')
         self._hex_to_bgr('stroke_color')
 
     def _validate_configs(self):
-        attributes = [self.in_range_params, self.canny_params, self.hough_params, self.composite_params]
+        attributes = [self.in_range_params, self.canny_params, self.composite_params]
         for i, step in enumerate(self._DEFAULT_CONFIG.keys()):
             parameters = [val for val in self._DEFAULT_CONFIG[step]]
             for param in parameters:
@@ -45,8 +44,10 @@ class CannyKCluster():
 
     def _hex_to_bgr(self, key):
         hex_color = self.composite_params.get(key)
-        
-        if hex_color.startswith("#"):
+        if isinstance(hex_color, tuple):
+            self.composite_params[key] = hex_color
+            return
+        elif hex_color.startswith("#"):
             hex_color = hex_color[1:]
         
         if len(hex_color) != 6:
@@ -64,15 +65,12 @@ class CannyKCluster():
         threshold = self._threshold_lane_lines(frame, **self.in_range_params)
         roi = self._select_ROI(threshold, self.roi)
         edge_map = self._detect_edges(roi, **self.canny_params)
-        hough, lines = self._fit_lines(frame, edge_map, **self.hough_params)
-        if lines is None:
-            return threshold, edge_map, hough, frame
-        composite = self._create_composite(frame, lines, self.roi, **self.composite_params)
-        return threshold, edge_map, hough, composite
-            
+        composite = self._create_composite(frame, edge_map, self._POLYGON, **self.composite_params)
+        return composite
+
     def _threshold_lane_lines(self, frame, lower_bounds, upper_bounds):
-        img = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        thresh = cv2.inRange(img, lower_bounds, upper_bounds)
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        thresh = cv2.inRange(gray, lower_bounds, upper_bounds)
         return thresh
 
     def _select_ROI(self, thresh_img, poly):
@@ -95,26 +93,64 @@ class CannyKCluster():
             img = cv2.GaussianBlur(img, (3, 3), 0)
         return img
 
-    def _fit_lines(self, frame, edge_map, rho, theta, thresh, min_length, max_gap):
-        hough = np.zeros((frame.shape[0], frame.shape[1], 3), dtype=np.uint8)
-        lines = cv2.HoughLinesP(edge_map, rho, theta, thresh, min_length, max_gap)
-        if lines is None:
-            return hough, None
-        self._draw_lines(hough, lines, color=(255, 255, 255))
-        return hough, lines
-    
-    def _create_composite(self, frame, lines, poly, stroke, stroke_color, fill, fill_color):
-        if lines is None:
+    def _create_composite(self, frame, edge_map, poly, stroke, stroke_color, fill, fill_color):
+        if edge_map is None:
             raise ValueError("Error: argument passed for lines contains no lines.")
         else:
-            lanes_classified = self._classify_lines(lines)
-            lane_lines = self._gen_line_of_best_fit(lanes_classified, poly)
+            pts = self._point_extraction(edge_map)
+            clustered = self._point_clustering(pts)
+            fit = [self._fit_poly(lane) for lane in clustered]
 
             canvas = np.zeros([frame.shape[0], frame.shape[1], 3], dtype=np.uint8)
-            self._draw_stroke_fill(canvas, lane_lines, stroke, stroke_color, fill, fill_color)
+            self._draw_stroke_fill(canvas, fit, stroke, stroke_color, fill, fill_color)
 
-            img = cv2.addWeighted(frame, 0.8, canvas, 0.3, 0.0)
-            return img
+            composite = cv2.addWeighted(frame, 0.8, canvas, 0.3, 0.0)
+            return composite
+    
+    def _point_extraction(self, edge_map):
+        edge_pts = np.where(edge_map != 0)
+        return np.column_stack((edge_pts[1], edge_pts[0]))
+    
+    def _point_clustering(self, pts):
+        labels = self.kmeans.fit_predict(pts)
+
+        left = pts[labels == 0]
+        right = pts[labels == 1]
+        return [left, right]
+
+    def _fit_poly(self, lane):
+        x = np.array([x for x, _ in lane])
+        y = np.array([y for _, y in lane])
+
+        coeff = np.polyfit(x, y, deg=2)
+        x_smooth = np.linspace(x.min(), x.max(), 100)
+        y_smooth = np.polyval(coeff, x_smooth)
+
+        points = np.array([x_smooth, y_smooth], dtype=np.int32).T
+        return points.reshape((-1, 1, 2))
+    
+    def _draw_stroke_fill(self, canvas, lanes, stroke, stroke_color, fill, fill_color):
+        if lanes is None:
+            raise ValueError("Error: argument passed for lines contains no lines.")
+        else:
+            if stroke:
+                self._draw_lines(canvas, [lanes[0]], stroke_color, 10)
+                self._draw_lines(canvas, [lanes[1]], stroke_color, 10)
+            if fill:
+                self._draw_fill(canvas, lanes, fill_color)
+
+    def _draw_fill(self, frame, lines, color):
+        if lines is None:
+            raise ValueError("Lines are None")
+            
+        poly = np.concatenate(lines, dtype=np.int32)
+        cv2.fillPoly(img=frame, pts=[poly], color=color)
+
+    def _draw_lines(self, frame, points, color, thickness):
+        if points is None:
+            raise ValueError("Error: argument passed for lines contains no lines.")
+        else:
+            cv2.polylines(frame, points, isClosed=False, color=color, thickness=thickness, lineType=cv2.LINE_AA)
     
     def _gen_line_of_best_fit(self, lanes, poly):
         yMin = min(poly[0][0][1], poly[0][-1][1])
@@ -127,70 +163,31 @@ class CannyKCluster():
             if math.isinf(lanes[lateral]['mAvg']) or math.isinf(lanes[lateral]['bAvg']):
                 raise ValueError("Error: Infinite float.")
             else:
-                xMin = int((yMin - lanes[lateral]['bAvg']) // lanes[lateral]['mAvg'])
-                xMax = int((yMax - lanes[lateral]['bAvg']) // lanes[lateral]['mAvg'])
-
-                lanes[lateral]['line'].append([xMin, yMin, xMax, yMax])
+                try:
+                    xMin = int((yMin - lanes[lateral]['bAvg']) // lanes[lateral]['mAvg'])
+                    xMax = int((yMax - lanes[lateral]['bAvg']) // lanes[lateral]['mAvg'])
+                    lanes[lateral]['line'].append([xMin, yMin, xMax, yMax])
+                except Exception as e:
+                    raise ValueError(f"Error: {e}")
+                
         return [lanes['left']['line'], lanes['right']['line']]
 
-    def _classify_lines(self, lines):
-        lanes = {'left': {'m': [], 'b': [], 'mAvg': 0, 'bAvg': 0, 'line': []},
-                'right': {'m': [], 'b': [], 'mAvg': 0, 'bAvg': 0, 'line': []}}
-        for line in lines:
-            m, b = self._calc_slope_intercept(*line)
-            if m is not None:
-                if m < 0:
-                    lanes['left']['m'].append(m)
-                    lanes['left']['b'].append(b)
-                elif m > 0:
-                    lanes['right']['m'].append(m) 
-                    lanes['right']['b'].append(b)
-        return lanes
+if __name__ == "__main__":
 
-    def _calc_slope_intercept(self, line):
-        if line is None:
-            raise ValueError(f"Error: {line} == 'NoneType'")
+    cap = cv2.VideoCapture("../../media/lane1-straight.mp4")
+
+    if not cap.isOpened():
+        print("Error: Could not open video.")
+
+    processor = CannyKMeans()
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
         else:
-            x1, y1, x2, y2 = line
-            if x1 == x2:
-                print(f"Warning: Vertical line detected {line}, skipping")
-                return None, None
-            
-            m = (y1 - y2) / (x1 - x2)
-            b = y1 - (m * x1)
-            return m, b
-
-    def _calc_avg(self, values):
-        if values is None:
-            raise ValueError(f"Error: {values} == 'NoneType'")
-        else:
-            if len(values) > 0:
-                n = len(values)
-            else:
-                n = 1
-            return sum(values) / n
-
-    def _draw_stroke_fill(self, img, lines, stroke, stroke_color, fill, fill_color):
-        if lines is None:
-            raise ValueError("Error: argument passed for lines contains no lines.")
-        else:
-            if stroke:
-                self._draw_lines(img, [lines[0]], stroke_color, 10)
-                self._draw_lines(img, [lines[1]], stroke_color, 10)
-            if fill:
-                self._draw_fill(img, lines, fill_color)
-
-    def _draw_fill(self, img, lines, color):
-        points = np.array([[*[[x1, y1] for x1, y1, _, _ in lines[0]],
-                            *[[x2, y2] for _, _, x2, y2 in lines[0]],
-                            *[[x2, y2] for _, _, x2, y2 in lines[1]],
-                            *[[x1, y1] for x1, y1, _, _ in lines[1]]]], dtype='int32')
-        cv2.fillPoly(img=img, pts=points, color=color)
-
-    def _draw_lines(self, img, lines, color, thickness=1):
-        if lines is None:
-            raise ValueError("Error: argument passed for lines contains no lines.")
-        else:
-            for line in lines:
-                for x1, y1, x2, y2 in line:
-                    cv2.line(img, (x1, y1), (x2, y2), color, thickness, cv2.LINE_AA)
+            composite = processor.run(frame)
+            cv2.imshow("test", composite)
+            cv2.waitKey(1)
+    
+    cv2.destroyAllWindows()

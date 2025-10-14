@@ -1,3 +1,3 @@
 from .studio import Render, Read, Write
-from .CannyHoughP import CannyHoughP
+from .StraightLine import CannyHoughP
 from .CurvedLine import CannyKCluster

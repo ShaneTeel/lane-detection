@@ -2,7 +2,6 @@ import cv2
 import os
 import numpy as np
 import pandas as pd
-import base64
 import time
 import streamlit as st
 from streamlit_image_coordinates import streamlit_image_coordinates as img_xy

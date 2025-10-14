@@ -3,7 +3,7 @@ from fastapi.responses import StreamingResponse
 import cv2
 import asyncio
 from scripts.studio import Render, Read, Write
-from scripts.CannyHoughP import CannyHoughP
+from scripts.StraightLine import CannyHoughP
 from scripts.CurvedLine import CannyKCluster
 
 app = FastAPI()
