@@ -24,6 +24,7 @@ class CannyKMeans():
         self.canny_params = configs['canny']
         self.composite_params = configs['composite']
         self.roi = roi
+        self.prev_coeffs = {"left": None, "right": None}
         self.kmeans = KMeans(2, random_state=42)
         self._validate_configs() # Validate configs
         self._hex_to_bgr('fill_color')
@@ -58,7 +59,6 @@ class CannyKMeans():
         b = int(hex_color[4:6], 16)
 
         self.composite_params[key] = (b, g, r)
-
 
     def run(self, frame):
         '''ADD LATER'''
@@ -98,13 +98,14 @@ class CannyKMeans():
             raise ValueError("Error: argument passed for lines contains no lines.")
         else:
             pts = self._point_extraction(edge_map)
-            clustered = self._point_clustering(pts)
-            fit = [self._fit_poly(lane) for lane in clustered]
+            clusters = self._point_clustering(pts)
+            fit = self._ransac_polyfit(clusters)
 
             canvas = np.zeros([frame.shape[0], frame.shape[1], 3], dtype=np.uint8)
             self._draw_stroke_fill(canvas, fit, stroke, stroke_color, fill, fill_color)
 
             composite = cv2.addWeighted(frame, 0.8, canvas, 0.3, 0.0)
+
             return composite
     
     def _point_extraction(self, edge_map):
@@ -112,38 +113,132 @@ class CannyKMeans():
         return np.column_stack((edge_pts[1], edge_pts[0]))
     
     def _point_clustering(self, pts):
+        # Fit/predict kmeans
         labels = self.kmeans.fit_predict(pts)
-
+        
+        # Segregate left/right
         left = pts[labels == 0]
         right = pts[labels == 1]
         return [left, right]
-
-    def _fit_poly(self, lane):
-        x = np.array([x for x, _ in lane])
-        y = np.array([y for _, y in lane])
-
-        coeff = np.polyfit(x, y, deg=2)
-        x_smooth = np.linspace(x.min(), x.max(), 100)
-        y_smooth = np.polyval(coeff, x_smooth)
-
-        points = np.array([x_smooth, y_smooth], dtype=np.int32).T
-        return points.reshape((-1, 1, 2))
     
-    def _draw_stroke_fill(self, canvas, lanes, stroke, stroke_color, fill, fill_color):
-        if lanes is None:
+    def _ransac_polyfit(self, lanes, degree:int=2, n_iter:int=100, threshold:int=50, min_inliers:float=0.6, alpha:float=0.7):
+        fit = []
+
+        for i, lane in enumerate(lanes):
+            # Create X, y variables
+            X = lane[:, 0]
+            y = lane[:, 1]
+
+            # Get best coeffs
+            best_coeffs = self._best_coeffs(X, y, n_iter, degree, threshold, min_inliers)         
+
+            # Smooth coeffs
+            smoothed_coeffs = self._smooth_coeffs(best_coeffs, "left" if i == 0 else "right", alpha)
+
+            # Generate Curved Lines
+            fit.append(self._gen_curved_lines(smoothed_coeffs))
+
+        return fit
+    
+    def _gen_curved_lines(self, smoothed_coeffs):
+        
+        # Gen smooth curve in scaled sapce
+        x_smooth_scaled = np.linspace(0, 1, 100)
+        y_smooth_scaled = np.polyval(smoothed_coeffs, x_smooth_scaled)
+
+        # Return scaled values to original coordinates
+        X_smooth, y_smooth = self._anti_scaler(x_smooth_scaled, y_smooth_scaled)
+
+        points = np.array([X_smooth, y_smooth], dtype=np.int32).T
+
+        return points.reshape((-1, 1, 2))
+
+    def _smooth_coeffs(self, coeffs, direction, alpha : float = 0.7):
+        # Direction picker
+        prev_coeffs = self.prev_coeffs.get(direction)
+
+        # Coefficient Smoothing
+        if prev_coeffs is None:
+            smoothed_coeffs = coeffs
+        else:
+            smoothed_coeffs = (alpha * coeffs + (1 - alpha) * prev_coeffs)
+            
+        # Assign Coefficients (smoothed) to attributes (persists across calls)
+        self.prev_coeffs[direction] = smoothed_coeffs
+        return smoothed_coeffs
+    
+    def _best_coeffs(self, X, y, n_iter, degree, threshold, min_inliers):
+        # Normalize values for polyfit
+        X, y, threshold = self._min_max_scaler(X, y, threshold)
+
+        # Create best coeffs check variables
+        best_coeffs = None
+        best_inlier_count = 0
+        n_points = len(X)
+        
+        for _ in range(n_iter):
+            # Random sampling
+            sample_idx = np.random.choice(n_points, size=degree+1, replace=False)
+            sample_X = X[sample_idx]
+            sample_y = y[sample_idx]
+
+            # Fit polynomial to samples
+            coeffs = np.polyfit(sample_X, sample_y, degree)
+
+            # Evaluate fit on all points
+            y_pred = np.polyval(coeffs, X)
+            errors = np.abs(y - y_pred)
+
+            # Count inliers (points close to fit)
+            inliers = errors < threshold
+            inlier_count = np.sum(inliers)
+
+            # Best coeffs check
+            if inlier_count > best_inlier_count:
+                best_inlier_count = inlier_count
+                best_coeffs = coeffs
+            
+        # Best coeffs vs normal polyfit check
+        if best_inlier_count < min_inliers * n_points:
+            return np.polyfit(X, y, degree)
+        else:
+            return best_coeffs
+    
+    def _anti_scaler(self, X_scaled, y_scaled):
+        X_min, X_max, y_min, y_max = self.scale_params
+
+        X = X_scaled * (X_max - X_min) + X_min
+        y = y_scaled * (y_max - y_min) + y_min
+        return X, y
+
+    def _min_max_scaler(self, X, y, threshold):
+        X_min, X_max = X.min(), X.max()
+        X_norm = (X - X_min) / (X_max - X_min) if X_max > X_min else X
+
+        y_min, y_max = y.min(), y.max()
+        y_norm = (y - y_min) / (y_max - y_min) if y_max > y_min else y
+
+        threshold_norm = threshold / (y_max - y_min) if y_max > y_min else y
+
+        self.scale_params = [X_min, X_max, y_min, y_max]
+
+        return X_norm, y_norm, threshold_norm
+
+    def _draw_stroke_fill(self, canvas, fit, stroke, stroke_color, fill, fill_color):
+        if fit is None:
             raise ValueError("Error: argument passed for lines contains no lines.")
         else:
             if stroke:
-                self._draw_lines(canvas, [lanes[0]], stroke_color, 10)
-                self._draw_lines(canvas, [lanes[1]], stroke_color, 10)
+                self._draw_lines(canvas, [fit[0]], stroke_color, 10)
+                self._draw_lines(canvas, [fit[1]], stroke_color, 10)
             if fill:
-                self._draw_fill(canvas, lanes, fill_color)
+                self._draw_fill(canvas, fit, fill_color)
 
-    def _draw_fill(self, frame, lines, color):
-        if lines is None:
+    def _draw_fill(self, frame, fit, color):
+        if fit is None:
             raise ValueError("Lines are None")
             
-        poly = np.concatenate(lines, dtype=np.int32)
+        poly = np.concatenate(fit, dtype=np.int32)
         cv2.fillPoly(img=frame, pts=[poly], color=color)
 
     def _draw_lines(self, frame, points, color, thickness):
