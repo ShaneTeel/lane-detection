@@ -1,52 +1,74 @@
 import cv2
 import numpy as np
 import math
-from sklearn.cluster import KMeans
+import copy
 
-class CannyKMeans():
+class CannyRANSAC():
     '''Test'''
-    _POLYGON = np.array([[[100, 540], [900, 540], [515, 320], [450, 320]]])
+    _POLYGON = np.array([[[100, 540], 
+                          [900, 540], 
+                          [515, 320], 
+                          [450, 320]]])
     _DEFAULT_CONFIG = {
                 'in_range': {'lower_bounds': 150, 'upper_bounds': 255},
                 'canny': {'canny_low': 50, 'canny_high': 100, 'blur_first': True},
+                'fit': {'n_iter': 100, 'degree': 2, 'threshold': 50, 'min_inliers': 0.6, 'factor': 0.1},
                 'composite': {'stroke': True, "stroke_color": (0, 0, 255), 'fill': True, "fill_color": (0, 255, 0)}
             }
 
     def __init__(self, roi = None, configs = None):
         if configs is None:
-            configs = self._DEFAULT_CONFIG
-        
-        if roi is not None:
-            roi = np.array([[pt for pt in roi]])
+            self.configs = self._DEFAULT_CONFIG
         else:
-            roi = self._POLYGON
-        self.in_range_params = configs['in_range']
-        self.canny_params = configs['canny']
-        self.composite_params = configs['composite']
-        self.roi = roi
-        self.prev_coeffs = {"left": None, "right": None}
-        self.kmeans = KMeans(2, random_state=42)
-        self._validate_configs() # Validate configs
+            self.configs = copy.deepcopy(self._DEFAULT_CONFIG)
+            self._merge_configs(configs)
+        
+
+        self.in_range_params = self.configs['in_range']
+        self.canny_params = self.configs['canny']
+        self.fit_params = self.configs['fit']
+        self.composite_params = self.configs['composite']
+        self.prev_points = {"left": None, "right": None}
+        
+        self._roi_validation(roi)
         self._hex_to_bgr('fill_color')
         self._hex_to_bgr('stroke_color')
 
+    def _merge_configs(self, user_configs):
+        def _recursive_update(default_dict, new_dict):
+            for key, val in new_dict.items():
+                if isinstance(val, dict) and key in default_dict and isinstance(default_dict[key], dict):
+                    _recursive_update(default_dict[key], val)
+                else:
+                    default_dict[key] = val
+
+        _recursive_update(self.configs, user_configs)
+        self._validate_configs()
+
     def _validate_configs(self):
-        attributes = [self.in_range_params, self.canny_params, self.composite_params]
+        attributes = [self.in_range_params, self.canny_params, self.fit_params, self.composite_params]
         for i, step in enumerate(self._DEFAULT_CONFIG.keys()):
             parameters = [val for val in self._DEFAULT_CONFIG[step]]
             for param in parameters:
                     if param not in attributes[i]:
                         raise ValueError(f"Missing required threshold parameter: {param}")
 
-
-        ####################################################
-        # ADD VALIDATION FOR PARAMETER VALUE TYPE / RANGES #
-        ####################################################
+    def _roi_validation(self, roi):
+        if roi is None:
+            self.roi = self._POLYGON
+        else:
+            expected_shape = (1, 4, 2)
+            if roi.shape == expected_shape:
+                self.roi = roi
+            else:
+                try:
+                    self.roi = roi.reshape(1, 4, 2)
+                except Exception as e:
+                    assert AssertionError(e)
 
     def _hex_to_bgr(self, key):
         hex_color = self.composite_params.get(key)
         if isinstance(hex_color, tuple):
-            self.composite_params[key] = hex_color
             return
         elif hex_color.startswith("#"):
             hex_color = hex_color[1:]
@@ -65,7 +87,8 @@ class CannyKMeans():
         threshold = self._threshold_lane_lines(frame, **self.in_range_params)
         roi = self._select_ROI(threshold, self.roi)
         edge_map = self._detect_edges(roi, **self.canny_params)
-        composite = self._create_composite(frame, edge_map, self._POLYGON, **self.composite_params)
+        lane_lines = self._fit_lane_lines(edge_map, **self.fit_params)
+        composite = self._create_composite(frame, lane_lines, **self.composite_params)
         return threshold, edge_map, composite
 
     def _threshold_lane_lines(self, frame, lower_bounds, upper_bounds):
@@ -84,7 +107,7 @@ class CannyKMeans():
         roi = cv2.bitwise_and(src1=thresh_img, src2=mask)
         return roi
 
-    def _detect_edges(self, roi, canny_low, canny_high, blur_first):
+    def _detect_edges(self, roi, canny_low, canny_high, blur_first:bool=True):
         if blur_first == True:
             img = cv2.GaussianBlur(roi, (3, 3), 0)
             img = cv2.Canny(img, canny_low, canny_high)
@@ -93,97 +116,78 @@ class CannyKMeans():
             img = cv2.GaussianBlur(img, (3, 3), 0)
         return img
 
-    def _create_composite(self, frame, edge_map, poly, stroke, stroke_color, fill, fill_color):
+    def _fit_lane_lines(self, edge_map, n_iter, degree, threshold, min_inliers, factor):
         if edge_map is None:
-            raise ValueError("Error: argument passed for lines contains no lines.")
+            raise ValueError("Error: Argument passed for edge map is none")
         else:
             pts = self._point_extraction(edge_map)
-            clusters = self._point_clustering(pts)
-            fit = self._ransac_polyfit(clusters)
+            pts_split = self._point_splitting(pts)
+            fit = self._ransac_polyfit(pts_split, n_iter, degree, threshold, min_inliers, factor)
+            return fit
 
+    def _create_composite(self, frame, fit, stroke, stroke_color, fill, fill_color):
+        if fit is None:
+            raise ValueError("Error: argument passed for fit is none.")
+        else:
             canvas = np.zeros([frame.shape[0], frame.shape[1], 3], dtype=np.uint8)
             self._draw_stroke_fill(canvas, fit, stroke, stroke_color, fill, fill_color)
 
             composite = cv2.addWeighted(frame, 0.8, canvas, 0.3, 0.0)
 
             return composite
-    
+
     def _point_extraction(self, edge_map):
         edge_pts = np.where(edge_map != 0)
         return np.column_stack((edge_pts[1], edge_pts[0]))
     
-    def _point_clustering(self, pts):
-        # Fit/predict kmeans
-        labels = self.kmeans.fit_predict(pts)
-        
-        # Segregate left/right
-        left = pts[labels == 0]
-        right = pts[labels == 1]
+    def _point_splitting(self, pts):
+        if len(pts) == 0:
+            return [np.array([]), np.array([])]
+
+        x_mid = self.roi[:, :, 0].mean()
+
+        left = pts[pts[:, 0] < x_mid]
+        right = pts[pts[:, 0] >= x_mid]        
+
         return [left, right]
     
-    def _ransac_polyfit(self, lanes, degree:int=2, n_iter:int=100, threshold:int=50, min_inliers:float=0.6, alpha:float=0.7):
+    def _ransac_polyfit(self, clusters, n_iter, degree, threshold, min_inliers, factor):
         fit = []
 
-        for i, lane in enumerate(lanes):
+        for i, cluster in enumerate(clusters):
             # Create X, y variables
-            X = lane[:, 0]
-            y = lane[:, 1]
+            X = cluster[:, 0]
+            y = cluster[:, 1]
 
             # Get best coeffs
-            best_coeffs = self._best_coeffs(X, y, n_iter, degree, threshold, min_inliers)         
-
-            # Smooth coeffs
-            smoothed_coeffs = self._smooth_coeffs(best_coeffs, "left" if i == 0 else "right", alpha)
+            best_coeffs = self._best_coeffs(X, y, n_iter, degree, threshold, min_inliers)
 
             # Generate Curved Lines
-            fit.append(self._gen_curved_lines(smoothed_coeffs))
+            fit.append(self._gen_curved_lines(best_coeffs, "left" if i == 0 else "rigth", factor))
 
         return fit
     
-    def _gen_curved_lines(self, smoothed_coeffs):
-        
-        # Gen smooth curve in scaled sapce
-        x_smooth_scaled = np.linspace(0, 1, 100)
-        y_smooth_scaled = np.polyval(smoothed_coeffs, x_smooth_scaled)
-
-        # Return scaled values to original coordinates
-        X_smooth, y_smooth = self._anti_scaler(x_smooth_scaled, y_smooth_scaled)
-
-        points = np.array([X_smooth, y_smooth], dtype=np.int32).T
-
-        return points.reshape((-1, 1, 2))
-
-    def _smooth_coeffs(self, coeffs, direction, alpha : float = 0.7):
-        # Direction picker
-        prev_coeffs = self.prev_coeffs.get(direction)
-
-        # Coefficient Smoothing
-        if prev_coeffs is None:
-            smoothed_coeffs = coeffs
-        else:
-            smoothed_coeffs = (alpha * coeffs + (1 - alpha) * prev_coeffs)
-            
-        # Assign Coefficients (smoothed) to attributes (persists across calls)
-        self.prev_coeffs[direction] = smoothed_coeffs
-        return smoothed_coeffs
-    
-    def _best_coeffs(self, X, y, n_iter, degree, threshold, min_inliers):
+    def _best_coeffs(self, X, y, n_iter:int=100, degree:int=2, threshold:int=20, min_inliers:float=0.6):
         # Normalize values for polyfit
         X, y, threshold = self._min_max_scaler(X, y, threshold)
 
         # Create best coeffs check variables
-        best_coeffs = None
+        best_inliers = None
         best_inlier_count = 0
         n_points = len(X)
+        sample_size = min(max(degree+3, 5), n_points)
         
         for _ in range(n_iter):
             # Random sampling
-            sample_idx = np.random.choice(n_points, size=degree+1, replace=False)
+            sample_idx = np.random.choice(n_points, size=sample_size, replace=False)
             sample_X = X[sample_idx]
             sample_y = y[sample_idx]
 
             # Fit polynomial to samples
-            coeffs = np.polyfit(sample_X, sample_y, degree)
+            try:
+                coeffs = np.polyfit(sample_X, sample_y, degree)
+            except np.linalg.LinAlgError:
+                continue
 
             # Evaluate fit on all points
             y_pred = np.polyval(coeffs, X)
@@ -196,13 +200,48 @@ class CannyKMeans():
             # Best coeffs check
             if inlier_count > best_inlier_count:
                 best_inlier_count = inlier_count
-                best_coeffs = coeffs
+                best_inliers = inliers
             
         # Best coeffs vs normal polyfit check
-        if best_inlier_count < min_inliers * n_points:
+        if best_inlier_count <= min_inliers * n_points:
             return np.polyfit(X, y, degree)
         else:
-            return best_coeffs
+            inlier_X = X[best_inliers]
+            inlier_y = y[best_inliers]
+            return np.polyfit(inlier_X, inlier_y, degree)
+        
+    def _min_max_scaler(self, X, y, threshold):
+        targets = [X, y]
+        params = []
+        for i in range(len(targets)):
+            val = targets[i]
+            min, max = val.min(), val.max()
+            params.append([min, max])
+            targets[i] = (val - min) / (max - min) if max > min else val
+            if i == 1:
+                targets.append(threshold / (max - min) if max > min else threshold)
+
+        self.scale_params = [val for sub in params for val in sub]
+
+        return targets
+    
+    def _gen_curved_lines(self, best_coeffs, direction, factor:float = 0.3):
+        # Gen curve in scaled sapce
+        x_scaled = np.linspace(0, 1, 100)
+        y_scaled = np.polyval(best_coeffs, x_scaled)
+
+        # Return scaled values to original coordinate space
+        X, y = self._anti_scaler(x_scaled, y_scaled)
+        points = np.array([X, y], dtype=np.int32).T
+
+        # Smooth points if able
+        if self.prev_points.get(direction) is not None:
+            points = (factor * points + (1 - factor) * self.prev_points.get(direction)).astype(np.int32)
+        
+        # Assign points to persistent variable for next frame
+        self.prev_points[direction] = points
+
+        return points.reshape((-1, 1, 2))
     
     def _anti_scaler(self, X_scaled, y_scaled):
         X_min, X_max, y_min, y_max = self.scale_params
@@ -211,20 +250,7 @@ class CannyKMeans():
         y = y_scaled * (y_max - y_min) + y_min
         return X, y
 
-    def _min_max_scaler(self, X, y, threshold):
-        X_min, X_max = X.min(), X.max()
-        X_norm = (X - X_min) / (X_max - X_min) if X_max > X_min else X
-
-        y_min, y_max = y.min(), y.max()
-        y_norm = (y - y_min) / (y_max - y_min) if y_max > y_min else y
-
-        threshold_norm = threshold / (y_max - y_min) if y_max > y_min else y
-
-        self.scale_params = [X_min, X_max, y_min, y_max]
-
-        return X_norm, y_norm, threshold_norm
-
-    def _draw_stroke_fill(self, canvas, fit, stroke, stroke_color, fill, fill_color):
+    def _draw_stroke_fill(self, canvas, fit, stroke:bool=True, stroke_color:tuple=(0, 0, 255), fill:bool=True, fill_color:tuple=(0, 255, 0)):
         if fit is None:
             raise ValueError("Error: argument passed for lines contains no lines.")
         else:
@@ -234,14 +260,14 @@ class CannyKMeans():
             if fill:
                 self._draw_fill(canvas, fit, fill_color)
 
-    def _draw_fill(self, frame, fit, color):
+    def _draw_fill(self, frame, fit, color:tuple=(0, 255, 0)):
         if fit is None:
             raise ValueError("Lines are None")
             
         poly = np.concatenate(fit, dtype=np.int32)
         cv2.fillPoly(img=frame, pts=[poly], color=color)
 
-    def _draw_lines(self, frame, points, color, thickness):
+    def _draw_lines(self, frame, points, color:tuple=(0, 0, 255), thickness:int=1):
         if points is None:
             raise ValueError("Error: argument passed for lines contains no lines.")
         else:
