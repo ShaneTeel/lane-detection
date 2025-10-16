@@ -130,7 +130,7 @@ class CannyRANSAC():
             raise ValueError("Error: argument passed for fit is none.")
         else:
             canvas = np.zeros([frame.shape[0], frame.shape[1], 3], dtype=np.uint8)
-            self._draw_stroke_fill(canvas, fit, stroke, stroke_color, fill, fill_color)
+            self._draw_curve_stroke_fill(canvas, fit, stroke, stroke_color, fill, fill_color)
 
             composite = cv2.addWeighted(frame, 0.8, canvas, 0.3, 0.0)
 
@@ -147,23 +147,28 @@ class CannyRANSAC():
         x_mid = self.roi[:, :, 0].mean()
 
         left = pts[pts[:, 0] < x_mid]
-        right = pts[pts[:, 0] >= x_mid]        
+        right = pts[pts[:, 0] >= x_mid]
 
         return [left, right]
     
-    def _ransac_polyfit(self, clusters, n_iter, degree, threshold, min_inliers, factor):
+    def _ransac_polyfit(self, lanes, n_iter, degree, threshold, min_inliers, factor):
         fit = []
 
-        for i, cluster in enumerate(clusters):
-            # Create X, y variables
-            X = cluster[:, 0]
-            y = cluster[:, 1]
+        for i, lane in enumerate(lanes):
+            # X, y, and direction variable creation
+            direction = "left" if i == 0 else "right"
+            X = lane[:, 0]
+            y = lane[:, 1]
+
+            if len(lane) < degree + 1:
+                print(f"WARNING: {direction} lane does not have enough points to perform fit. Skipping lane of length {len(lane)}.")
+                continue
 
             # Get best coeffs
             best_coeffs = self._best_coeffs(X, y, n_iter, degree, threshold, min_inliers)
 
             # Generate Curved Lines
-            fit.append(self._gen_curved_lines(best_coeffs, "left" if i == 0 else "rigth", factor))
+            fit.append(self._gen_smoothed_curved_lines(best_coeffs, direction, factor))
 
         return fit
     
@@ -172,8 +177,10 @@ class CannyRANSAC():
         X, y, threshold = self._min_max_scaler(X, y, threshold)
 
         # Create best coeffs check variables
+        poly_size = degree + 1
         best_inliers = None
         best_inlier_count = 0
+        best_coeffs = None
         n_points = len(X)
         sample_size = min(max(degree+3, 5), n_points)
         
@@ -186,7 +193,11 @@ class CannyRANSAC():
             # Fit polynomial to samples
             try:
                 coeffs = np.polyfit(sample_X, sample_y, degree)
-            except np.linalg.LinAlgError:
+
+                if not isinstance(coeffs, np.ndarray) or len(coeffs) != poly_size:
+                    continue
+
+            except (np.linalg.LinAlgError, TypeError, ValueError):
                 continue
 
             # Evaluate fit on all points
@@ -201,14 +212,35 @@ class CannyRANSAC():
             if inlier_count > best_inlier_count:
                 best_inlier_count = inlier_count
                 best_inliers = inliers
-            
+                best_coeffs = coeffs
+
         # Best coeffs vs normal polyfit check
-        if best_inlier_count <= min_inliers * n_points:
-            return np.polyfit(X, y, degree)
-        else:
+        if best_inliers is not None and best_inlier_count >= min_inliers * n_points:
             inlier_X = X[best_inliers]
             inlier_y = y[best_inliers]
-            return np.polyfit(inlier_X, inlier_y, degree)
+            if len(inlier_X) >= poly_size:
+                try:
+                    ransac_coeffs = np.polyfit(inlier_X, inlier_y, degree)
+                    if isinstance(ransac_coeffs, np.ndarray) and len(ransac_coeffs) == poly_size:
+                        return ransac_coeffs
+                except (np.linalg.LinAlgError, TypeError, ValueError):
+                    pass
+                else:
+                    return best_coeffs # Return best coeffs without refit
+
+        # FAIL SAFE #1: If leading coefficient is a negative value, fit all data
+        if degree == 2 and best_coeffs is not None:
+            if best_coeffs[0] < 0:
+                print(f"WARNING: Suspecious parabola a = {best_coeffs[0]}")
+                return np.polyfit(X, y, degree)
+
+        # FAIL SAFE #2: Fit all data
+        try:
+            last_resort = np.polyfit(X, y, degree)
+            if isinstance(last_resort, np.ndarray) and len(last_resort) == poly_size:
+                return last_resort
+        except:
+            pass
         
     def _min_max_scaler(self, X, y, threshold):
         targets = [X, y]
@@ -225,9 +257,10 @@ class CannyRANSAC():
 
         return targets
     
-    def _gen_curved_lines(self, best_coeffs, direction, factor:float = 0.3):
+    def _gen_smoothed_curved_lines(self, best_coeffs, direction, factor:float = 0.3):
         # Gen curve in scaled sapce
         x_scaled = np.linspace(0, 1, 100)
+        print(best_coeffs)
         y_scaled = np.polyval(best_coeffs, x_scaled)
 
         # Return scaled values to original coordinate space
@@ -250,13 +283,13 @@ class CannyRANSAC():
         y = y_scaled * (y_max - y_min) + y_min
         return X, y
 
-    def _draw_stroke_fill(self, canvas, fit, stroke:bool=True, stroke_color:tuple=(0, 0, 255), fill:bool=True, fill_color:tuple=(0, 255, 0)):
+    def _draw_curve_stroke_fill(self, canvas, fit, stroke:bool=True, stroke_color:tuple=(0, 0, 255), fill:bool=True, fill_color:tuple=(0, 255, 0)):
         if fit is None:
-            raise ValueError("Error: argument passed for lines contains no lines.")
+            raise ValueError("Error: argument passed fCannyKMeansor lines contains no lines.")
         else:
             if stroke:
-                self._draw_lines(canvas, [fit[0]], stroke_color, 10)
-                self._draw_lines(canvas, [fit[1]], stroke_color, 10)
+                self._draw_curved_lines(canvas, [fit[0]], stroke_color, 10)
+                self._draw_curved_lines(canvas, [fit[1]], stroke_color, 10)
             if fill:
                 self._draw_fill(canvas, fit, fill_color)
 
@@ -267,7 +300,7 @@ class CannyRANSAC():
         poly = np.concatenate(fit, dtype=np.int32)
         cv2.fillPoly(img=frame, pts=[poly], color=color)
 
-    def _draw_lines(self, frame, points, color:tuple=(0, 0, 255), thickness:int=1):
+    def _draw_curved_lines(self, frame, points, color:tuple=(0, 0, 255), thickness:int=1):
         if points is None:
             raise ValueError("Error: argument passed for lines contains no lines.")
         else:
@@ -300,7 +333,7 @@ if __name__ == "__main__":
     if not cap.isOpened():
         print("Error: Could not open video.")
 
-    processor = CannyKMeans()
+    processor = CannyRANSAC()
     pause = False
 
     while True and not pause:
