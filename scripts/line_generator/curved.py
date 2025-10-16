@@ -13,7 +13,6 @@ class CannyRANSAC():
                 'in_range': {'lower_bounds': 150, 'upper_bounds': 255},
                 'canny': {'canny_low': 50, 'canny_high': 100, 'blur_first': True},
                 'fit': {'n_iter': 100, 'degree': 2, 'threshold': 50, 'min_inliers': 0.6, 'factor': 0.1},
-                'composite': {'stroke': True, "stroke_color": (0, 0, 255), 'fill': True, "fill_color": (0, 255, 0)}
             }
 
     def __init__(self, roi = None, configs = None):
@@ -22,17 +21,13 @@ class CannyRANSAC():
         else:
             self.configs = copy.deepcopy(self._DEFAULT_CONFIG)
             self._merge_configs(configs)
-        
 
         self.in_range_params = self.configs['in_range']
         self.canny_params = self.configs['canny']
         self.fit_params = self.configs['fit']
-        self.composite_params = self.configs['composite']
         self.prev_points = {"left": None, "right": None}
         
         self._roi_validation(roi)
-        self._hex_to_bgr('fill_color')
-        self._hex_to_bgr('stroke_color')
 
     def _merge_configs(self, user_configs):
         def _recursive_update(default_dict, new_dict):
@@ -46,7 +41,7 @@ class CannyRANSAC():
         self._validate_configs()
 
     def _validate_configs(self):
-        attributes = [self.in_range_params, self.canny_params, self.fit_params, self.composite_params]
+        attributes = [self.in_range_params, self.canny_params, self.fit_params]
         for i, step in enumerate(self._DEFAULT_CONFIG.keys()):
             parameters = [val for val in self._DEFAULT_CONFIG[step]]
             for param in parameters:
@@ -66,34 +61,17 @@ class CannyRANSAC():
                 except Exception as e:
                     assert AssertionError(e)
 
-    def _hex_to_bgr(self, key):
-        hex_color = self.composite_params.get(key)
-        if isinstance(hex_color, tuple):
-            return
-        elif hex_color.startswith("#"):
-            hex_color = hex_color[1:]
-        
-        if len(hex_color) != 6:
-            raise ValueError("Invalid hex color code format. Expected six characters (remove alpha channel)")
-        
-        r = int(hex_color[0:2], 16)
-        g = int(hex_color[2:4], 16)
-        b = int(hex_color[4:6], 16)
-
-        self.composite_params[key] = (b, g, r)
-
     def run(self, frame):
         '''ADD LATER'''
         threshold = self._threshold_lane_lines(frame, **self.in_range_params)
         roi = self._select_ROI(threshold, self.roi)
         edge_map = self._detect_edges(roi, **self.canny_params)
         lane_lines = self._fit_lane_lines(edge_map, **self.fit_params)
-        composite = self._create_composite(frame, lane_lines, **self.composite_params)
-        return threshold, edge_map, composite
-
+        return threshold, edge_map, lane_lines
+    
     def _threshold_lane_lines(self, frame, lower_bounds, upper_bounds):
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        thresh = cv2.inRange(gray, lower_bounds, upper_bounds)
+        img = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        thresh = cv2.inRange(img, lower_bounds, upper_bounds)
         return thresh
 
     def _select_ROI(self, thresh_img, poly):
@@ -125,17 +103,6 @@ class CannyRANSAC():
             fit = self._ransac_polyfit(pts_split, n_iter, degree, threshold, min_inliers, factor)
             return fit
 
-    def _create_composite(self, frame, fit, stroke, stroke_color, fill, fill_color):
-        if fit is None:
-            raise ValueError("Error: argument passed for fit is none.")
-        else:
-            canvas = np.zeros([frame.shape[0], frame.shape[1], 3], dtype=np.uint8)
-            self._draw_curve_stroke_fill(canvas, fit, stroke, stroke_color, fill, fill_color)
-
-            composite = cv2.addWeighted(frame, 0.8, canvas, 0.3, 0.0)
-
-            return composite
-
     def _point_extraction(self, edge_map):
         edge_pts = np.where(edge_map != 0)
         return np.column_stack((edge_pts[1], edge_pts[0]))
@@ -149,20 +116,42 @@ class CannyRANSAC():
         left = pts[pts[:, 0] < x_mid]
         right = pts[pts[:, 0] >= x_mid]
 
-        return [left, right]
+        lanes_raw = [left, right]
+        lanes_filtered = []
+
+        # Lane X-Val Filter
+        for lane in lanes_raw:
+            if lane is not None:
+                X = lane[:, 0]
+                X_median = np.median(X)
+                X_std = np.std(X)
+
+                mask = np.abs(X - X_median) < (2 * X_std)
+                lanes_filtered.append(lane[mask])
+
+        return lanes_filtered
     
     def _ransac_polyfit(self, lanes, n_iter, degree, threshold, min_inliers, factor):
         fit = []
 
         for i, lane in enumerate(lanes):
-            # X, y, and direction variable creation
+            # Direction variable
             direction = "left" if i == 0 else "right"
-            X = lane[:, 0]
-            y = lane[:, 1]
-
+            
             if len(lane) < degree + 1:
                 print(f"WARNING: {direction} lane does not have enough points to perform fit. Skipping lane of length {len(lane)}.")
                 continue
+            
+            # X-Value Filter 
+            X = lane[:, 0]
+            y = lane[:, 1]
+
+            y_range = y.max() - y.min()
+            top_third = lane[lane[:, 1] < (y.min() + y_range / 3)]
+
+            if len(top_third) < 5: 
+                print(f"{direction}: sparse top, using degree = 1")
+                degree = 1
 
             # Get best coeffs
             best_coeffs = self._best_coeffs(X, y, n_iter, degree, threshold, min_inliers)
@@ -175,6 +164,14 @@ class CannyRANSAC():
     def _best_coeffs(self, X, y, n_iter:int=100, degree:int=2, threshold:int=20, min_inliers:float=0.6):
         # Normalize values for polyfit
         X, y, threshold = self._min_max_scaler(X, y, threshold)
+        self.y = y
+
+        # Constrain y to prevent inaccruate line response
+        y_min_idx, y_max_idx = np.argmin(y), np.argmax(y)
+
+        weight = 5
+        X_constrained = np.concatenate([X] + [X[[y_min_idx, y_max_idx]]] * weight)
+        y_constrained = np.concatenate([y] + [y[[y_min_idx, y_max_idx]]] * weight)
 
         # Create best coeffs check variables
         poly_size = degree + 1
@@ -187,8 +184,8 @@ class CannyRANSAC():
         for _ in range(n_iter):
             # Random sampling
             sample_idx = np.random.choice(n_points, size=sample_size, replace=False)
-            sample_X = X[sample_idx]
-            sample_y = y[sample_idx]
+            sample_X = X_constrained[sample_idx]
+            sample_y = y_constrained[sample_idx]
 
             # Fit polynomial to samples
             try:
@@ -202,7 +199,7 @@ class CannyRANSAC():
 
             # Evaluate fit on all points
             y_pred = np.polyval(coeffs, X)
-            errors = np.abs(y - y_pred)
+            errors = np.abs(sum(y - y_pred) ** 2)
 
             # Count inliers (points close to fit)
             inliers = errors < threshold
@@ -213,6 +210,12 @@ class CannyRANSAC():
                 best_inlier_count = inlier_count
                 best_inliers = inliers
                 best_coeffs = coeffs
+
+        # Leading Coefficient check: If leading coefficient is a negative value, fit all data
+        if degree == 2 and best_coeffs is not None:
+            if best_coeffs[0] < 0:
+                # print(f"WARNING: Suspecious parabola a = {best_coeffs[0]}")
+                return np.polyfit(X_constrained, y_constrained, degree)
 
         # Best coeffs vs normal polyfit check
         if best_inliers is not None and best_inlier_count >= min_inliers * n_points:
@@ -228,15 +231,9 @@ class CannyRANSAC():
                 else:
                     return best_coeffs # Return best coeffs without refit
 
-        # FAIL SAFE #1: If leading coefficient is a negative value, fit all data
-        if degree == 2 and best_coeffs is not None:
-            if best_coeffs[0] < 0:
-                print(f"WARNING: Suspecious parabola a = {best_coeffs[0]}")
-                return np.polyfit(X, y, degree)
-
-        # FAIL SAFE #2: Fit all data
+        # FAIL SAFE: Fit all data
         try:
-            last_resort = np.polyfit(X, y, degree)
+            last_resort = np.polyfit(X_constrained, y_constrained, degree)
             if isinstance(last_resort, np.ndarray) and len(last_resort) == poly_size:
                 return last_resort
         except:
@@ -258,13 +255,13 @@ class CannyRANSAC():
         return targets
     
     def _gen_smoothed_curved_lines(self, best_coeffs, direction, factor:float = 0.3):
-        # Gen curve in scaled sapce
+        # Gen curve in scaled space
+
         x_scaled = np.linspace(0, 1, 100)
-        print(best_coeffs)
         y_scaled = np.polyval(best_coeffs, x_scaled)
 
         # Return scaled values to original coordinate space
-        X, y = self._anti_scaler(x_scaled, y_scaled)
+        X, y = self._inverse_scaler(x_scaled, y_scaled)
         points = np.array([X, y], dtype=np.int32).T
 
         # Smooth points if able
@@ -276,58 +273,17 @@ class CannyRANSAC():
 
         return points.reshape((-1, 1, 2))
     
-    def _anti_scaler(self, X_scaled, y_scaled):
+    def _inverse_scaler(self, X_scaled, y_scaled):
         X_min, X_max, y_min, y_max = self.scale_params
 
         X = X_scaled * (X_max - X_min) + X_min
         y = y_scaled * (y_max - y_min) + y_min
         return X, y
 
-    def _draw_curve_stroke_fill(self, canvas, fit, stroke:bool=True, stroke_color:tuple=(0, 0, 255), fill:bool=True, fill_color:tuple=(0, 255, 0)):
-        if fit is None:
-            raise ValueError("Error: argument passed fCannyKMeansor lines contains no lines.")
-        else:
-            if stroke:
-                self._draw_curved_lines(canvas, [fit[0]], stroke_color, 10)
-                self._draw_curved_lines(canvas, [fit[1]], stroke_color, 10)
-            if fill:
-                self._draw_fill(canvas, fit, fill_color)
-
-    def _draw_fill(self, frame, fit, color:tuple=(0, 255, 0)):
-        if fit is None:
-            raise ValueError("Lines are None")
-            
-        poly = np.concatenate(fit, dtype=np.int32)
-        cv2.fillPoly(img=frame, pts=[poly], color=color)
-
-    def _draw_curved_lines(self, frame, points, color:tuple=(0, 0, 255), thickness:int=1):
-        if points is None:
-            raise ValueError("Error: argument passed for lines contains no lines.")
-        else:
-            cv2.polylines(frame, points, isClosed=False, color=color, thickness=thickness, lineType=cv2.LINE_AA)
-    
-    def _gen_line_of_best_fit(self, lanes, poly):
-        yMin = min(poly[0][0][1], poly[0][-1][1])
-        yMax = max(poly[0][0][1], poly[0][-1][1])
-
-        for lateral in lanes.keys():
-            lanes[lateral]['mAvg'] = self._calc_avg(lanes[lateral]['m'])
-            lanes[lateral]['bAvg'] = self._calc_avg(lanes[lateral]['b'])
-
-            if math.isinf(lanes[lateral]['mAvg']) or math.isinf(lanes[lateral]['bAvg']):
-                raise ValueError("Error: Infinite float.")
-            else:
-                try:
-                    xMin = int((yMin - lanes[lateral]['bAvg']) // lanes[lateral]['mAvg'])
-                    xMax = int((yMax - lanes[lateral]['bAvg']) // lanes[lateral]['mAvg'])
-                    lanes[lateral]['line'].append([xMin, yMin, xMax, yMax])
-                except Exception as e:
-                    raise ValueError(f"Error: {e}")
-                
-        return [lanes['left']['line'], lanes['right']['line']]
-
 if __name__ == "__main__":
 
+    # cap = cv2.VideoCapture("media/test_img1.jpg")
+    
     cap = cv2.VideoCapture("media/lane1-straight.mp4")
 
     if not cap.isOpened():

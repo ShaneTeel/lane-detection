@@ -9,8 +9,7 @@ class CannyHoughP():
     _DEFAULT_CONFIG = {
                 'in_range': {'lower_bounds': 150, 'upper_bounds': 255},
                 'canny': {'canny_low': 50, 'canny_high': 100, 'blur_first': False},
-                'hough': {'rho': 1, 'theta': np.pi / 180, 'thresh': 50, 'min_length': 10, 'max_gap': 20},
-                'composite': {'stroke': True, "stroke_color": (0, 0, 255), 'fill': True, "fill_color": (0, 255, 0)}
+                'hough': {'rho': 1, 'theta': np.pi / 180, 'thresh': 50, 'min_length': 10, 'max_gap': 20}
             }
 
     def __init__(self, roi, configs):
@@ -27,11 +26,9 @@ class CannyHoughP():
         self.composite_params = configs['composite']
         self.roi = roi
         self._validate_configs() # Validate configs
-        self._hex_to_bgr('fill_color')
-        self._hex_to_bgr('stroke_color')
 
     def _validate_configs(self):
-        attributes = [self.in_range_params, self.canny_params, self.hough_params, self.composite_params]
+        attributes = [self.in_range_params, self.canny_params, self.hough_params]
         for i, step in enumerate(self._DEFAULT_CONFIG.keys()):
             parameters = [val for val in self._DEFAULT_CONFIG[step]]
             for param in parameters:
@@ -43,22 +40,6 @@ class CannyHoughP():
         # ADD VALIDATION FOR PARAMETER VALUE TYPE / RANGES #
         ####################################################
 
-    def _hex_to_bgr(self, key):
-        hex_color = self.composite_params.get(key)
-        
-        if hex_color.startswith("#"):
-            hex_color = hex_color[1:]
-        
-        if len(hex_color) != 6:
-            raise ValueError("Invalid hex color code format. Expected six characters (remove alpha channel)")
-        
-        r = int(hex_color[0:2], 16)
-        g = int(hex_color[2:4], 16)
-        b = int(hex_color[4:6], 16)
-
-        self.composite_params[key] = (b, g, r)
-
-
     def run(self, frame):
         '''ADD LATER'''
         threshold = self._threshold_lane_lines(frame, **self.in_range_params)
@@ -67,8 +48,8 @@ class CannyHoughP():
         hough, lines = self._fit_lines(frame, edge_map, **self.hough_params)
         if lines is None:
             return threshold, edge_map, hough, frame
-        composite = self._create_composite(frame, lines, self.roi, **self.composite_params)
-        return threshold, edge_map, hough, composite
+        lanes = self._gen_lane_lines(lines, self.roi)
+        return threshold, edge_map, lanes 
             
     def _threshold_lane_lines(self, frame, lower_bounds, upper_bounds):
         img = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -102,6 +83,13 @@ class CannyHoughP():
             return hough, None
         self._draw_lines(hough, lines, color=(255, 255, 255))
         return hough, lines
+    
+    def _gen_lane_lines(self, lines, poly):
+        if lines is None:
+            raise ValueError("Error: argument passed for lines contains no lines.")
+        else:
+            lanes_classified = self._classify_lines(lines)
+            return self._gen_line_of_best_fit(lanes_classified, poly)
     
     def _create_composite(self, frame, lines, poly, stroke, stroke_color, fill, fill_color):
         if lines is None:

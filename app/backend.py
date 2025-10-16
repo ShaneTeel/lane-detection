@@ -2,9 +2,7 @@ from fastapi import FastAPI, HTTPException, Response, File, UploadFile
 from fastapi.responses import StreamingResponse
 import cv2
 import asyncio
-from scripts.studio import Render, Read, Write
-from scripts.StraightLine import CannyHoughP
-from scripts.CurvedLine import CannyKCluster
+from scripts import Render, Read, Write, CannyRANSAC, CannyHoughP
 
 app = FastAPI()
 
