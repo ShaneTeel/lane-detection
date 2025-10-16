@@ -4,7 +4,7 @@ import base64
 
 class Writer():
     def __init__(self, source):
-        self.file_out_name = source.name + "processed"
+        self.file_out_name = "./media/out/" + source.name + "-processed"
         self.ext = source.ext
         self.width = source.width
         self.height = source.height

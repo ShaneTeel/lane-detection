@@ -47,8 +47,8 @@ class LaneDetector():
 
 
 if __name__ == "__main__":
-    source = "media/lane1-straight.mp4"
-    # source = "media/test_img1.jpg"
+    source = "media/in/lane1-straight.mp4"
+    # source = "media/in/test_img1.jpg"
 
     processor_type = "CannyRANSAC"
     detector = LaneDetector(source, processor_type)
