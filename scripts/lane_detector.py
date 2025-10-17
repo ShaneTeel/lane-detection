@@ -1,20 +1,31 @@
 import cv2
-import numpy as np
 import numpy.typing as npt
 from studio import Reader, Writer, Render, Illustrator, Controller, Custodian
-from line_generator import CannyRANSAC, CannyHoughP
+from detection import RANSACLineGenerator
 
-class LaneDetector():
+class RANSACLaneDetector():
 
-    def __init__(self, source, processor_type:str = ['CannyHoughP', 'CannyRANSAC'], roi:npt.NDArray = None, configs:dict = None, stroke_color:tuple = (0, 0, 255), fill_color:tuple=(0, 255, 0)):
-        
+    def __init__(self, source, roi:npt.NDArray = None, configs:dict = None, stroke_color:tuple = (0, 0, 255), fill_color:tuple=(0, 255, 0)):
+
+        self.roi = self._roi_validation(roi)
+        self.processor = RANSACLineGenerator(self.roi, configs)
         self.source = Reader(source)
         self.writer = Writer(self.source)
-        self.processor = self._initialize_processor(processor_type, roi, configs)
         self.draw = Illustrator(stroke_color, fill_color)
         self.render = Render()
         self.controller = Controller(self.source)
         self.custodian = Custodian(self.source, self.writer)
+
+
+    def _roi_validation(self, roi):
+        expected_shape = (1, 4, 2)
+        if roi.shape == expected_shape:
+            return roi
+        else:
+            try:
+                return roi.reshape(1, 4, 2)
+            except Exception as e:
+                raise ValueError(e)
 
     def detect(self, names:list = None):
         if names is None:
@@ -25,32 +36,37 @@ class LaneDetector():
             if not ret:
                 break
             else:
-                thresh, edge, lines = self.processor.run(frame)
-                composite = self.draw.draw_curved_stroke_fill(frame, lines, stroke=False)
+                thresh, edge, edge_mask, fit = self.processor.fit(frame)
+                composite = self.draw.draw_curved_stroke_fill(frame, fit, stroke=False)
                 final = self.render.render_final_view([frame, thresh, edge, composite], names)
 
                 cv2.imshow("test", final)
                 key = cv2.waitKey(1)
                 if key == 27 or key == 32:
                     break
-        
-    def _initialize_processor(self, processor_type, roi, configs:dict):
-        if not isinstance(processor_type, str):
-            raise TypeError("ERROR: Argument passed to `processor_type` must be of str dtype.")
-        
-        processor_type = processor_type.lower()
-
-        if processor_type not in ["cannyhoughp", "cannyransac"]:
-            raise ValueError("ERROR: Argument passed to `processor_type` not a valid processor type.")
-        
-        return CannyHoughP(roi, configs) if processor_type == "cannyhoughp" else CannyRANSAC(roi, configs)
-
 
 if __name__ == "__main__":
-    source = "media/in/lane1-straight.mp4"
+    import numpy as np
+
+    source = "../media/in/lane1-straight.mp4"
     # source = "media/in/test_img1.jpg"
 
-    processor_type = "CannyRANSAC"
-    detector = LaneDetector(source, processor_type)
+    roi = np.array([[[100, 540], 
+                     [900, 540], 
+                     [515, 320], 
+                     [450, 320]]])
+    
+    user_configs = {
+        "preprocessor": {
+        'in_range': {'lower_bounds': 150, 'upper_bounds': 255},
+        'canny': {'weak_edge': 50, 'sure_edge': 100, 'blur_ksize': 3, "blur_order": "before"},
+    },
+        "generator": {
+            'filter': {'filter_type': 'median', 'n_std': 2.0},
+            'polyfit': {'n_iter': 100, 'degree': 2, 'threshold': 50, 'min_inliers': 0.6, 'weight': 5, 'factor': 0.1}
+        }
+    }
+
+    detector = RANSACLaneDetector(source, roi, user_configs)
 
     detector.detect()

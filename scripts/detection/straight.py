@@ -3,7 +3,7 @@ import numpy as np
 import math
 import streamlit as st
 
-class CannyHoughP():
+class HoughPLineGenerator():
     '''Test'''
     _POLYGON = np.array([[[100, 540], [900, 540], [515, 320], [450, 320]]])
     _DEFAULT_CONFIG = {
@@ -40,7 +40,7 @@ class CannyHoughP():
         # ADD VALIDATION FOR PARAMETER VALUE TYPE / RANGES #
         ####################################################
 
-    def run(self, frame):
+    def fit(self, frame):
         '''ADD LATER'''
         threshold = self._threshold_lane_lines(frame, **self.in_range_params)
         roi = self._select_ROI(threshold, self.roi)
