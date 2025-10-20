@@ -3,15 +3,14 @@ import numpy as np
 import math
 import streamlit as st
 
-class HoughPLineGenerator():
+class HoughLineGenerator():
     '''Test'''
-    _POLYGON = np.array([[[100, 540], [900, 540], [515, 320], [450, 320]]])
     _DEFAULT_CONFIG = {
                 'in_range': {'lower_bounds': 150, 'upper_bounds': 255},
                 'canny': {'canny_low': 50, 'canny_high': 100, 'blur_first': False},
                 'hough': {'rho': 1, 'theta': np.pi / 180, 'thresh': 50, 'min_length': 10, 'max_gap': 20}
             }
-
+    
     def __init__(self, roi, configs):
         if configs is None:
             configs = self._DEFAULT_CONFIG
@@ -40,44 +39,16 @@ class HoughPLineGenerator():
         # ADD VALIDATION FOR PARAMETER VALUE TYPE / RANGES #
         ####################################################
 
-    def fit(self, frame):
+    def fit(self, edge_map):
         '''ADD LATER'''
-        threshold = self._threshold_lane_lines(frame, **self.in_range_params)
-        roi = self._select_ROI(threshold, self.roi)
-        edge_map = self._detect_edges(roi, **self.canny_params)
-        hough, lines = self._fit_lines(frame, edge_map, **self.hough_params)
+        hough, lines = self._fit_lines(edge_map, **self.hough_params)
         if lines is None:
-            return threshold, edge_map, hough, frame
+            return hough, edge_map
         lanes = self._gen_lane_lines(lines, self.roi)
-        return threshold, edge_map, lanes 
-            
-    def _threshold_lane_lines(self, frame, lower_bounds, upper_bounds):
-        img = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        thresh = cv2.inRange(img, lower_bounds, upper_bounds)
-        return thresh
-
-    def _select_ROI(self, thresh_img, poly):
-        mask = np.zeros_like(thresh_img)
-        if len(thresh_img.shape) > 2:
-            num_channels = thresh_img.shape[2]
-            roi_color = (255,) * num_channels
-        else:
-            roi_color = 255
-        cv2.fillPoly(img=mask, pts=poly, color=roi_color)
-        roi = cv2.bitwise_and(src1=thresh_img, src2=mask)
-        return roi
-
-    def _detect_edges(self, roi, canny_low, canny_high, blur_first):
-        if blur_first == True:
-            img = cv2.GaussianBlur(roi, (3, 3), 0)
-            img = cv2.Canny(img, canny_low, canny_high)
-        else:
-            img = cv2.Canny(roi, canny_low, canny_high)
-            img = cv2.GaussianBlur(img, (3, 3), 0)
-        return img
+        return edge_map, lanes 
 
     def _fit_lines(self, frame, edge_map, rho, theta, thresh, min_length, max_gap):
-        hough = np.zeros((frame.shape[0], frame.shape[1], 3), dtype=np.uint8)
+        hough = np.zeros((edge_map.shape[0], edge_map.shape[1], 3), dtype=np.uint8)
         lines = cv2.HoughLinesP(edge_map, rho, theta, thresh, min_length, max_gap)
         if lines is None:
             return hough, None

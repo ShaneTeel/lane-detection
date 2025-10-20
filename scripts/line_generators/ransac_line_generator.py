@@ -1,6 +1,4 @@
 import numpy as np
-from .manage_configs import RANSACConfigManager
-from .preprocess import Preprocessor
 
 class RANSACLineGenerator():
     '''Test'''
@@ -16,27 +14,22 @@ class RANSACLineGenerator():
 
     def __init__(self, roi, configs:dict = None):
         if configs is None:
-            pre_configs, gen_configs = self._DEFAULT_CONFIG, None
-        
-        else:
-            pre_configs, gen_configs = self._get_configs(configs)
+            configs = self._DEFAULT_CONFIG, None
 
         self.roi = roi
-        self.preprocessor = Preprocessor(roi, pre_configs)
-        self.filtering_params = gen_configs['filter']
-        self.polyfit_params = gen_configs['polyfit']
+        self.filtering_params = configs['filter']
+        self.polyfit_params = configs['polyfit']
         self.prev_points = {"left": None, "right": None}
 
-    def fit(self, frame):
-        if frame is None:
+    def fit(self, edge_map):
+        if edge_map is None:
             raise ValueError("Error: Argument passed for edge map is none")
         else:
-            thresh, roi_mask, edge_map = self.preprocessor.preprocess(frame)
             pts = self._point_extraction(edge_map)
             pts_split = self._point_splitting(pts)
             pts_filtered = self._point_filtering(pts_split, **self.filtering_params)
             fit = self._ransac_polyfit(pts_filtered, **self.polyfit_params)
-            return thresh, roi_mask, edge_map, fit
+            return edge_map, fit
 
     def _point_extraction(self, edge_map):
         edge_pts = np.where(edge_map != 0)
@@ -219,8 +212,3 @@ class RANSACLineGenerator():
         X = X_scaled * (X_max - X_min) + X_min
         y = y_scaled * (y_max - y_min) + y_min
         return X, y
-    
-    def _get_configs(self, configs):
-        config_mngr = RANSACConfigManager(configs)
-        final = config_mngr.manage()
-        return final['preprocessor'], final['generator']

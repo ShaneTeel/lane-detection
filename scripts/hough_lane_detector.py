@@ -1,0 +1,3 @@
+class HoughLaneDetector():
+
+    pass

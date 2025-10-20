@@ -1,31 +1,13 @@
 import cv2
 import numpy as np
-from .manage_configs import RANSACConfigManager
-
+import numpy.typing as npt
 
 class Preprocessor:
 
-    _VALID_CONFIG_SETUP = {
-        'in_range': {'lower_bounds': list(range(0, 255)), 'upper_bounds': list(range(1, 256))},
-        'canny': {'weak_edge': list(range(0, 301)), 'sure_edge': list(range(0, 301)), 'blur_ksize': list(range(3, 16, 2)), "blur_order": ["before", "after"]},
-    }
-
-    _DEFAULT_CONFIG = {
-        'in_range': {'lower_bounds': 150, 'upper_bounds': 255},
-        'canny': {'weak_edge': 50, 'sure_edge': 100, 'blur_ksize': 3, "blur_order": "before"},
-    }
-
-    def __init__(self, roi, configs:dict=None):
-
-        if configs is None:
-            self.final_configs = self._DEFAULT_CONFIG
-        
-        else:
-            self.final_configs = configs
-
-        self.roi = roi
-        self.in_range_params = self.final_configs["in_range"]
-        self.canny_params = self.final_configs["canny"]
+    def __init__(self, roi:npt.NDArray = None, configs:dict=None):
+        self.roi = None if roi is None else roi
+        self.in_range_params = configs["in_range"]
+        self.canny_params = configs["canny"]
 
     def preprocess(self, frame):
         thresh = self._threshold_img(frame, **self.in_range_params)

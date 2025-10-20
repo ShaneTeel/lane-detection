@@ -1,35 +1,14 @@
 import numpy as np
 import copy
 
-class RANSACConfigManager():
+class ConfigManager():
     '''Validates user-passed configs, and merges with default configs if appropriate'''
 
-    _VALID_RANSAC_SETUP = {
-        "preprocessor": {
-            'in_range': {'lower_bounds': list(range(0, 255)), 'upper_bounds': list(range(1, 256))},
-            'canny': {'weak_edge': list(range(0, 301)), 'sure_edge': list(range(0, 301)), 'blur_ksize': list(range(3, 16, 2)), "blur_order": ["before", "after"]},
-        },        
-        "generator": {
-            'filter': {'filter_type': ['median', 'mean'], 'n_std': np.arange(0.0, 3.1, 0.01).tolist()},
-            'polyfit': {'n_iter': list(range(1, 101)), 'degree': [1, 2, 3], 'threshold': list(range(0, 101)), 'min_inliers': np.arange(0.0, 1.00, 0.01), 'weight': list(range(1, 11)), "factor": np.arange(0.0, 1.00, 0.01)},
-        }
-    }
-
-    _DEFAULT_RANSAC_CONFIGS = {
-        "preprocessor": {
-            'in_range': {'lower_bounds': 150, 'upper_bounds': 255},
-            'canny': {'weak_edge': 50, 'sure_edge': 100, 'blur_ksize': 3, "blur_order": "before"},
-        },
-        "generator": {
-            'filter': {'filter_type': 'median', 'n_std': 2}, 
-            'polyfit': {'n_iter': 100, 'degree': 2, 'threshold': 50, 'min_inliers': 0.6, 'weight': 5, 'factor': 0.1}
-        }
-    }
-
-    def __init__(self, user_configs:dict):
+    def __init__(self, user_configs:dict, default_configs:dict, valid_config_setup:dict):
 
         self.user_configs:dict = user_configs
-        self.final_configs:dict = copy.deepcopy(self._DEFAULT_RANSAC_CONFIGS)
+        self.final_configs: dict = copy.deepcopy(default_configs)
+        self.valid_config_setup = valid_config_setup
 
     def manage(self):
         if self.user_configs is None:
@@ -52,7 +31,7 @@ class RANSACConfigManager():
         
     def _validate_configs(self):
         # CHECK 1: Does the user-passed configuration include invalid events (Level 1 Keys)
-        invalid_events = set(self.final_configs.keys()).difference(self._VALID_RANSAC_SETUP.keys())
+        invalid_events = set(self.final_configs.keys()).difference(self.valid_config_setup.keys())
         if len(invalid_events) > 0:
 
             # If not, raise KeyError
@@ -62,7 +41,7 @@ class RANSACConfigManager():
         for event in self.final_configs.keys():
 
             # CHECK 2: If proposed step in valid steps
-            invalid_steps = set(self.final_configs[event].keys()).difference(self._VALID_RANSAC_SETUP[event].keys())
+            invalid_steps = set(self.final_configs[event].keys()).difference(self.valid_config_setup[event].keys())
             if len(invalid_steps) > 0:
         
                 # If not, raise KeyError
@@ -72,11 +51,11 @@ class RANSACConfigManager():
             for step in self.final_configs[event].keys():
             
                 # CHECK 2: If proposed step in valid steps
-                invalid_params = set(self.final_configs[event][step].keys()).difference(self._VALID_RANSAC_SETUP[event][step].keys())
+                invalid_params = set(self.final_configs[event][step].keys()).difference(self.valid_config_setup[event][step].keys())
                 if len(invalid_params) > 0:
 
                     # If not, raise KeyError
-                    raise KeyError(f"ERROR: User configuration includes invalid parameter/s: {invalid_params}")
+                    raise KeyError(f"ERROR: User configuration includes the following invalid keywords: {invalid_params}")
 
                 # Iterate through validated parameters (Level 3 Keys)
                 for param in self.final_configs[event][step].keys():
@@ -85,7 +64,7 @@ class RANSACConfigManager():
                     proposed_arg = self.final_configs[event][step][param]
 
                     # Extract valid arguments for each param
-                    valid_args = self._VALID_RANSAC_SETUP[event][step][param]
+                    valid_args = self.valid_config_setup[event][step][param]
                     
         
                     # If valid arg of type int or float
