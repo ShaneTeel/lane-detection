@@ -19,10 +19,9 @@ class Preprocessor:
 
         if configs is None:
             self.final_configs = self._DEFAULT_CONFIG
-
+        
         else:
-            self.config_mngr = RANSACConfigManager(configs)
-            self.final_configs = self.config_mngr.manage()
+            self.final_configs = configs
 
         self.roi = roi
         self.in_range_params = self.final_configs["in_range"]

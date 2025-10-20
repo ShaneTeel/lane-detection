@@ -5,13 +5,13 @@ class RANSACConfigManager():
     '''Validates user-passed configs, and merges with default configs if appropriate'''
 
     _VALID_RANSAC_SETUP = {
-        "generator": {
-            'filter': {'filter_type': ['median', 'mean'], 'n_std': np.arange(0.0, 3.1, 0.01).tolist()},
-            'polyfit': {'n_iter': list(range(1, 101)), 'degree': [1, 2, 3], 'threshold': list(range(0, 101)), 'min_inliers': np.arange(0.0, 1.00, 0.01), 'weight': list(range(1, 11)), "factor": np.arange(0.0, 1.00, 0.01)},
-        },
         "preprocessor": {
             'in_range': {'lower_bounds': list(range(0, 255)), 'upper_bounds': list(range(1, 256))},
             'canny': {'weak_edge': list(range(0, 301)), 'sure_edge': list(range(0, 301)), 'blur_ksize': list(range(3, 16, 2)), "blur_order": ["before", "after"]},
+        },        
+        "generator": {
+            'filter': {'filter_type': ['median', 'mean'], 'n_std': np.arange(0.0, 3.1, 0.01).tolist()},
+            'polyfit': {'n_iter': list(range(1, 101)), 'degree': [1, 2, 3], 'threshold': list(range(0, 101)), 'min_inliers': np.arange(0.0, 1.00, 0.01), 'weight': list(range(1, 11)), "factor": np.arange(0.0, 1.00, 0.01)},
         }
     }
 
@@ -48,56 +48,59 @@ class RANSACConfigManager():
                 else:
                     default_dict[key] = val
 
-        _recursive_update(self.final_configs, self.user_configs)        
+        _recursive_update(self.final_configs, self.user_configs)
         
     def _validate_configs(self):
-        # CHECK 1: Does the user-passed configuration include invalid events (outer-most keys)
-        invalid_keys = set(self.final_configs.keys()).difference(self._VALID_RANSAC_SETUP.keys())
-        if len(invalid_keys) > 0:
-            raise KeyError(f"ERROR: User-passed configuration includes an invalid keyword argument {invalid_keys}")
-        
-        # Iterate through validated events (outer-most keys)
+        # CHECK 1: Does the user-passed configuration include invalid events (Level 1 Keys)
+        invalid_events = set(self.final_configs.keys()).difference(self._VALID_RANSAC_SETUP.keys())
+        if len(invalid_events) > 0:
+
+            # If not, raise KeyError
+            raise KeyError(f"ERROR: User-passed configuration includes an invalid keyword argument {invalid_events}")
+         
+        # Iterate through validated events (Level 1 Keys)
         for event in self.final_configs.keys():
-            
-            # CHECK 1: If proposed event in valid events
-            for step in self.final_configs[event].keys():
-                if event not in self._VALID_RANSAC_SETUP[event].keys(): 
 
+            # CHECK 2: If proposed step in valid steps
+            invalid_steps = set(self.final_configs[event].keys()).difference(self._VALID_RANSAC_SETUP[event].keys())
+            if len(invalid_steps) > 0:
+        
                 # If not, raise KeyError
-                raise KeyError(f"ERROR: User configuration includes invalid step: '{step}\'")
-           
-            else:
-                # If all outer keys validated, extract inner keys
-                proprosed_args = [arg for arg in self.final_configs.get(step)] 
-                proposed_vals = [val for val in self.final_configs.get(step).values()]
-                valid_vals = [val for val in self._VALID_RANSAC_SETUP.get(step).values()]
+                raise KeyError(f"ERROR: User configuration includes invalid step/s: {invalid_steps}")
+            
+            # Iterate through validated steps (Level 2 Keys)
+            for step in self.final_configs[event].keys():
+            
+                # CHECK 2: If proposed step in valid steps
+                invalid_params = set(self.final_configs[event][step].keys()).difference(self._VALID_RANSAC_SETUP[event][step].keys())
+                if len(invalid_params) > 0:
+
+                    # If not, raise KeyError
+                    raise KeyError(f"ERROR: User configuration includes invalid parameter/s: {invalid_params}")
+
+                # Iterate through validated parameters (Level 3 Keys)
+                for param in self.final_configs[event][step].keys():
+                    
+                    # Extract proposed arguments for each param
+                    proposed_arg = self.final_configs[event][step][param]
+
+                    # Extract valid arguments for each param
+                    valid_args = self._VALID_RANSAC_SETUP[event][step][param]
+                    
+        
+                    # If valid arg of type int or float
+                    if isinstance(valid_args[0], int) or isinstance(valid_args[0], float):
+                        
+                        # Check 3A: If proposed arg in valid arg
+                        if proposed_arg not in valid_args:
+
+                            # If not, raise ValueError
+                            condition = f"{min(valid_args)} - {max(valid_args)}" if len(valid_args) > 10 else f"{valid_args}"
+                            raise ValueError(f"ERROR: User configuration includes invalid argument ({proposed_arg}) for parameter {param} in step {step} of event {event}.\n\t\tMust be of type {type(valid_args[0])} and in the range of {condition}.")
                 
-                # Iterate through inner keys
-                for i, arg in enumerate(proprosed_args): 
+                    # If valid arg of type str
+                    if isinstance(valid_args[0], str):
 
-                    # Extract valid inner keys
-                    valid_args = [arg for arg in self._VALID_RANSAC_SETUP.get(step)] 
-                    
-                    # CHECK 2: If inner key from final_configs is in valid_configs
-                    if arg not in valid_args: 
-
-                        # If not, raise KeyError
-                        raise KeyError(f"ERROR: User configuration includes invalid keyword argument ('{arg}') for step '{step}\'") 
-                    
-                    if isinstance(valid_vals[i][0], int) or isinstance(valid_vals[i][0], float): 
-                        
-                        if proposed_vals[i] in valid_vals[i]:
-                            print(f"Successfully validated {step} {arg} {proposed_vals[i]}")
-                            continue
-                        
-                        else:
-                            raise ValueError(f"ERROR: Argument passed to '{step}', '{arg}' not in valid range of {min(valid_vals[i])} - {max(valid_vals[i])}") 
-                    
-                    else:
-                       
-                        if proposed_vals[i] in valid_vals[i]:
-                            print(f"Successfully validated {step} {arg} {proposed_vals[i]}")
-                            continue
-                        
-                        else:
-                            raise ValueError(f"ERROR: Argument passed to '{step}', '{arg}' not one of {valid_vals[i]}")
+                        # Check 3B: If proposed arg in valid arg
+                        if proposed_arg not in valid_args:
+                            raise ValueError(f"ERROR: User configuration includes invalid argument ({proposed_arg}) for parameter {param} in step {step} of event {event}.\n\t\tMust be one of {valid_args}.")

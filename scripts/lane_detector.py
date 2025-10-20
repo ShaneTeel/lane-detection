@@ -36,9 +36,9 @@ class RANSACLaneDetector():
             if not ret:
                 break
             else:
-                thresh, edge, edge_mask, fit = self.processor.fit(frame)
+                thresh, roi_mask, edge_map, fit = self.processor.fit(frame)
                 composite = self.draw.draw_curved_stroke_fill(frame, fit, stroke=False)
-                final = self.render.render_final_view([frame, thresh, edge, composite], names)
+                final = self.render.render_final_view([frame, roi_mask, edge_map, composite], names)
 
                 cv2.imshow("test", final)
                 key = cv2.waitKey(1)
@@ -48,19 +48,19 @@ class RANSACLaneDetector():
 if __name__ == "__main__":
     import numpy as np
 
-    source = "../media/in/lane1-straight.mp4"
+    source = "media/in/lane1-straight.mp4"
     # source = "media/in/test_img1.jpg"
 
     roi = np.array([[[100, 540], 
                      [900, 540], 
                      [515, 320], 
                      [450, 320]]])
-    
+        
     user_configs = {
         "preprocessor": {
-        'in_range': {'lower_bounds': 150, 'upper_bounds': 255},
-        'canny': {'weak_edge': 50, 'sure_edge': 100, 'blur_ksize': 3, "blur_order": "before"},
-    },
+            'in_range': {'lower_bounds': 150, 'upper_bounds': 255},
+            'canny': {'weak_edge': 50, 'sure_edge': 100, 'blur_ksize': 3, "blur_order": "before"},
+        },
         "generator": {
             'filter': {'filter_type': 'median', 'n_std': 2.0},
             'polyfit': {'n_iter': 100, 'degree': 2, 'threshold': 50, 'min_inliers': 0.6, 'weight': 5, 'factor': 0.1}
@@ -70,3 +70,16 @@ if __name__ == "__main__":
     detector = RANSACLaneDetector(source, roi, user_configs)
 
     detector.detect()
+
+
+"""
+Tasks:
+	# 1. Config manager
+	2. ROI Calculator
+	3. Standardize RANSAC and HOUGHP
+	4. Find a way to add the intermediate step images to the final image (top row)
+	5. Hyperparameter Tuning
+	6. Batch Processing
+    7. Clean-up RANSAC lines (they are innacurate with a great amount of variance)
+        7a. Generate lines that reach the min/max of the selected/calculated ROI
+"""

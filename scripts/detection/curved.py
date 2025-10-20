@@ -15,8 +15,11 @@ class RANSACLineGenerator():
     }
 
     def __init__(self, roi, configs:dict = None):
+        if configs is None:
+            pre_configs, gen_configs = self._DEFAULT_CONFIG, None
         
-        pre_configs, gen_configs = self._get_configs(configs)
+        else:
+            pre_configs, gen_configs = self._get_configs(configs)
 
         self.roi = roi
         self.preprocessor = Preprocessor(roi, pre_configs)
@@ -197,12 +200,16 @@ class RANSACLineGenerator():
         X, y = self._inverse_scaler(x_scaled, y_scaled)
         points = np.array([X, y], dtype=np.int32).T
 
+
         # Smooth points if able
         if self.prev_points.get(direction) is not None:
             points = (factor * points + (1 - factor) * self.prev_points.get(direction)).astype(np.int32)
         
         # Assign points to persistent variable for next frame
         self.prev_points[direction] = points
+
+        # Filter points further by max ROI.y
+        points = points[points[:, 1] >= min(self.roi[:, :, 1][0])]
 
         return points.reshape((-1, 1, 2))
     
