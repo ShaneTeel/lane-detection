@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.signal import find_peaks
 
 class ROIManager():
 
@@ -23,48 +24,9 @@ class ROIManager():
 
     def _edge_density_roi(self, frame, percentile:int = 75):
         edge_map = self._generate_edge_map(frame, 50, 100, 3, "before")
-        
-
-        cv2.imshow("Edge Map", edge_map)
-        cv2.waitKey(0)
-
+                
         h, w = edge_map.shape[:2]
-        temp = np.zeros_like(edge_map)
-        result = np.zeros_like(edge_map)
-
         bottom = edge_map[h//2:, :]
-
-        cv2.imshow("Bottom", bottom)
-        cv2.waitKey(0)
-
-        frame = cv2.medianBlur(bottom, 3)
-
-        cv2.imshow("Blur", frame)
-        cv2.waitKey(0)
-
-        # for row in range(h // 2, h):
-        #     row_hist = np.zeros(256, dtype=int)
-        #     for kernel_row in range(5):
-        #         for kernel_col in range():
-        #             pixel = edge_map[row, col]
-        #             row_hist[pixel] += 1
-            
-        #     temp[row, col] = np.average(row_hist)
-
-
-        # cv2.imshow("Temp", temp)
-        # cv2.waitKey(0)
-
-        # for col in range(w):
-        #     col_hist = np.zeros(256, dtype=int)
-        #     for row in range(h//2, h):
-        #         pixel = temp[row, col]
-        #         col_hist[pixel] += 1
-            
-        #     result[row, col] = self._get_median(col_hist, h)
-
-        # cv2.imshow("Result", result)
-        # cv2.waitKey(0)
 
         density =  np.sum(bottom, axis=0)
         thresh = np.percentile(density, percentile)
@@ -80,18 +42,18 @@ class ROIManager():
                          [int(w * 0.45), int(h * 0.60)]]], dtype=np.int32)
         return roi
     
-    def _get_median(self, hist, h):
-        for intensity in range(256):
-            if hist[intensity] > (h // 2) // 2:
-                return 255
-        return 0
-
-
+    def _edge_density_roi2(self, frame):
+        edge_map = self._generate_edge_map(frame, 50, 150, 3, 'before')
+        
+        h, w = edge_map.shape
+        bottom = edge_map[h//2:, :]
+        density = np.sum(bottom, axis=0)
+        peaks, _ = find_peaks(density, distance=100, prominence=50)
 
     def _generate_edge_map(self, frame, weak_edge, sure_edge, blur_ksize, blur_order):
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-        thresh = cv2.inRange(gray, 150, 255)
+        thresh = cv2.inRange(gray, 200, 255)
 
         kernel = (blur_ksize, blur_ksize)
 
@@ -103,12 +65,11 @@ class ROIManager():
             img = cv2.GaussianBlur(img, kernel, 0)
         return img
 
-    
-
 if __name__ == "__main__":
     import cv2
 
     frame = cv2.imread('media/in/test_img1.jpg')
+    hist = cv2.calcHist([frame], [0], None, [256], [0, 256])
 
     test = ROIManager()
 
