@@ -5,55 +5,28 @@ import streamlit as st
 
 class HoughLineGenerator():
     '''Test'''
-    _DEFAULT_CONFIG = {
-                'in_range': {'lower_bounds': 150, 'upper_bounds': 255},
-                'canny': {'canny_low': 50, 'canny_high': 100, 'blur_first': False},
-                'hough': {'rho': 1, 'theta': np.pi / 180, 'thresh': 50, 'min_length': 10, 'max_gap': 20}
-            }
     
-    def __init__(self, roi, configs):
-        if configs is None:
-            configs = self._DEFAULT_CONFIG
-        
-        if roi is not None:
-            roi = np.array([[pt for pt in roi]])
-        else:
-            roi = self._POLYGON
-        self.in_range_params = configs['in_range']
-        self.canny_params = configs['canny']
-        self.hough_params = configs['hough']
-        self.composite_params = configs['composite']
+    def __init__(self, roi, rho, theta, thresh, min_length, max_gap):
+        self.rho = rho
+        self.theta = theta
+        self.thresh = thresh
+        self.min_length = min_length
+        self.max_gap = max_gap
         self.roi = roi
-        self._validate_configs() # Validate configs
-
-    def _validate_configs(self):
-        attributes = [self.in_range_params, self.canny_params, self.hough_params]
-        for i, step in enumerate(self._DEFAULT_CONFIG.keys()):
-            parameters = [val for val in self._DEFAULT_CONFIG[step]]
-            for param in parameters:
-                    if param not in attributes[i]:
-                        raise ValueError(f"Missing required threshold parameter: {param}")
-
-
-        ####################################################
-        # ADD VALIDATION FOR PARAMETER VALUE TYPE / RANGES #
-        ####################################################
 
     def fit(self, edge_map):
         '''ADD LATER'''
-        hough, lines = self._fit_lines(edge_map, **self.hough_params)
+        lines = self._fit_lines(edge_map, self.rho, self.theta, self.thresh, self.min_length, self.max_gap)
         if lines is None:
-            return hough, edge_map
+            return None
         lanes = self._gen_lane_lines(lines, self.roi)
-        return edge_map, lanes 
+        return lanes 
 
-    def _fit_lines(self, frame, edge_map, rho, theta, thresh, min_length, max_gap):
-        hough = np.zeros((edge_map.shape[0], edge_map.shape[1], 3), dtype=np.uint8)
+    def _fit_lines(self, edge_map, rho, theta, thresh, min_length, max_gap):
         lines = cv2.HoughLinesP(edge_map, rho, theta, thresh, min_length, max_gap)
         if lines is None:
-            return hough, None
-        self._draw_lines(hough, lines, color=(255, 255, 255))
-        return hough, lines
+            return None
+        return lines
     
     def _gen_lane_lines(self, lines, poly):
         if lines is None:
@@ -61,19 +34,6 @@ class HoughLineGenerator():
         else:
             lanes_classified = self._classify_lines(lines)
             return self._gen_line_of_best_fit(lanes_classified, poly)
-    
-    def _create_composite(self, frame, lines, poly, stroke, stroke_color, fill, fill_color):
-        if lines is None:
-            raise ValueError("Error: argument passed for lines contains no lines.")
-        else:
-            lanes_classified = self._classify_lines(lines)
-            lane_lines = self._gen_line_of_best_fit(lanes_classified, poly)
-
-            canvas = np.zeros([frame.shape[0], frame.shape[1], 3], dtype=np.uint8)
-            self._draw_stroke_fill(canvas, lane_lines, stroke, stroke_color, fill, fill_color)
-
-            img = cv2.addWeighted(frame, 0.8, canvas, 0.3, 0.0)
-            return img
     
     def _gen_line_of_best_fit(self, lanes, poly):
         yMin = min(poly[0][0][1], poly[0][-1][1])
@@ -131,28 +91,4 @@ class HoughLineGenerator():
             else:
                 n = 1
             return sum(values) / n
-
-    def _draw_stroke_fill(self, img, lines, stroke, stroke_color, fill, fill_color):
-        if lines is None:
-            raise ValueError("Error: argument passed for lines contains no lines.")
-        else:
-            if stroke:
-                self._draw_lines(img, [lines[0]], stroke_color, 10)
-                self._draw_lines(img, [lines[1]], stroke_color, 10)
-            if fill:
-                self._draw_fill(img, lines, fill_color)
-
-    def _draw_fill(self, img, lines, color):
-        points = np.array([[*[[x1, y1] for x1, y1, _, _ in lines[0]],
-                            *[[x2, y2] for _, _, x2, y2 in lines[0]],
-                            *[[x2, y2] for _, _, x2, y2 in lines[1]],
-                            *[[x1, y1] for x1, y1, _, _ in lines[1]]]], dtype='int32')
-        cv2.fillPoly(img=img, pts=points, color=color)
-
-    def _draw_lines(self, img, lines, color, thickness=1):
-        if lines is None:
-            raise ValueError("Error: argument passed for lines contains no lines.")
-        else:
-            for line in lines:
-                for x1, y1, x2, y2 in line:
-                    cv2.line(img, (x1, y1), (x2, y2), color, thickness, cv2.LINE_AA)
+    
