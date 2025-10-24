@@ -5,13 +5,17 @@ class Preprocessor:
 
     def __init__(self, roi:np.ndarray = None, configs:dict=None):
         self.roi = None if roi is None else roi
-        self.in_range_params = configs["in_range"]
-        self.canny_params = configs["canny"]
+        self.lower_bounds = configs["in_range"].get("lower_bounds")
+        self.upper_bounds = configs["in_range"].get("upper_bounds")
+        self.weak_edge = configs["canny"].get("weak_edge")
+        self.sure_edge = configs["canny"].get("sure_edge")
+        self.blur_ksize = configs["canny"].get("blur_ksize")
+        self.blur_order = configs["canny"].get("blur_order")
 
     def preprocess(self, frame):
-        thresh = self._threshold_img(frame, **self.in_range_params)
+        thresh = self._threshold_img(frame, self.lower_bounds, self.upper_bounds)
         masked = self._inverse_roi_mask(thresh, self.roi)
-        edge_map = self._generate_edge_map(masked, **self.canny_params)
+        edge_map = self._generate_edge_map(masked, self.weak_edge, self.sure_edge, self.blur_ksize, self.blur_order)
         return masked, edge_map
 
     def _threshold_img(self, frame, lower_bounds, upper_bounds):

@@ -114,15 +114,3 @@ if __name__ == "__main__":
     detector = RANSACLaneDetector(source, roi, user_configs)
 
     detector.detect("mosaic")
-
-
-"""
-Tasks:
-	2. ROI Calculator
-	3. Standardize RANSAC and HOUGHP
-	4. Find a way to add the intermediate step images to the final image (top row)
-	5. Hyperparameter Tuning
-	6. Batch Processing
-    7. Clean-up RANSAC lines (they are innacurate with a great amount of variance)
-        7a. Generate lines that reach the min/max of the selected/calculated ROI
-"""

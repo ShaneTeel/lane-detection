@@ -15,11 +15,14 @@ class HoughLineGenerator():
             configs = configs["hough"]
 
         self.rho = configs["rho"]
-        self.theta = configs["theta"]
+        self.theta = np.radians(configs["theta"])
         self.thresh = configs["thresh"]
         self.min_length = configs["min_length"]
         self.max_gap = configs["max_gap"]
         self.roi = roi
+        self.y_min = int(min(self.roi[0, 0, 1], self.roi[0, -1, 1]))
+        self.y_max = int(max(self.roi[0, 0, 1], self.roi[0, -1, 1]))
+        
 
     def fit(self, edge_map):
         '''ADD LATER'''
@@ -43,8 +46,6 @@ class HoughLineGenerator():
             return self._gen_line_of_best_fit(lanes_classified, poly)
     
     def _gen_line_of_best_fit(self, lanes, poly):
-        y_min = int(min(poly[0, 0, 1], poly[0, -1, 1]))
-        y_max = int(max(poly[0, 0, 1], poly[0, -1, 1]))
 
         for lateral in lanes.keys():
             lanes[lateral]['m_avg'] = self._calc_avg(lanes[lateral]['m'])
@@ -56,11 +57,12 @@ class HoughLineGenerator():
             if abs(lanes[lateral]['m_avg']) < 1e-6:
                 continue
             
-            x_min = int((y_min - lanes[lateral]['b_avg']) // lanes[lateral]['m_avg'])
-            x_max = int((y_max - lanes[lateral]['b_avg']) // lanes[lateral]['m_avg'])
-            lanes[lateral]['line'] = [x_min, y_min, x_max, y_max]
+            x_min = int((self.y_min - lanes[lateral]['b_avg']) // lanes[lateral]['m_avg'])
+            x_max = int((self.y_max - lanes[lateral]['b_avg']) // lanes[lateral]['m_avg'])
+            lanes[lateral]['line'] = [x_min, self.y_min, x_max, self.y_max]
 
-        return lanes['left']['line'], lanes['right']['line']
+        
+        return lanes['left'].get('line'), lanes['right'].get('line')
 
     def _classify_lines(self, lines):
         lanes = {'left': {'m': [], 'b': [], 'm_avg': 0, 'b_avg': 0, 'line': None},

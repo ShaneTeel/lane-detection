@@ -88,7 +88,6 @@ class RANSACLineGenerator():
 
             # Generate Curved Lines
             fit.append(self._gen_smoothed_curved_lines(best_coeffs, direction, factor))
-
         return fit
     
     def _best_coeffs(self, X, y, n_iter:int=100, degree:int=2, threshold:int=20, min_inliers:float=0.6, weight:int = 5):
@@ -203,7 +202,6 @@ class RANSACLineGenerator():
 
         # Filter points further by max ROI.y
         points = points[points[:, 1] >= min(self.roi[:, :, 1][0])]
-
         return points.reshape((-1, 1, 2))
     
     def _inverse_scaler(self, X_scaled, y_scaled):

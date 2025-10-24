@@ -13,13 +13,13 @@ class Illustrator:
         self.beta = beta
     
     def _gen_hough_composite(self, frame, lines, stroke:bool=True, fill:bool=True):
-        left, right = lines
-        if left is None and right is None:
-            print("No lines found, skipping")
-            return frame
         if not stroke and not fill:
             assert AssertionError("ERROR: One of `stroke` or `fill` must be `True`. Both cannot be `False`.")
         canvas = np.zeros_like(frame)
+        left, right = lines
+        if left is None and right is None:
+            print("No lines found, skipping")
+            return cv2.addWeighted(frame, self.alpha, canvas, self.beta, 0.0)
         if stroke:
             self._draw_hough_lines(canvas, left)
             self._draw_hough_lines(canvas, right)
@@ -30,25 +30,26 @@ class Illustrator:
             self._draw_hough_fill(left, right, canvas)
         return cv2.addWeighted(frame, self.alpha, canvas, self.beta, 0.0)
 
-    def _draw_hough_lines(self, img, line, color):
+    def _draw_hough_lines(self, img, line):
         if line is None:
             print("No lines, skipping.")
             return
         else:
-            for x1, y1, x2, y2 in line:
-                cv2.line(img, (x1, y1), (x2, y2), color, 3, cv2.LINE_AA)
+            line = np.array((line[:2], line[2:]), dtype=np.int32)
+            cv2.polylines(img, [line], isClosed=False, color=self.stroke_color, thickness=3, lineType=cv2.LINE_AA)
 
     def _draw_hough_fill(self, left, right, frame):
         poly = np.array([left[:2], left[2:], right[2:], right[:2]], dtype='int32').reshape(1, 4, 2)
         cv2.fillPoly(img=frame, pts=poly, color=self.fill_color)
 
     def _gen_ransac_composite(self, frame, lines, stroke:bool=True, fill:bool=True):
-        if lines is None:
-            raise ValueError("Error: argument passed fCannyKMeansor lines contains no lines.")
         if not stroke and not fill:
             assert AssertionError("ERROR: One of `stroke` or `fill` must be `True`. Both cannot be `False`.")
 
         canvas = np.zeros_like(frame)
+        left, right = lines
+        if left is None and right is None:
+            return cv2.addWeighted(frame, self.alpha, canvas, self.beta, 0.0)
         if stroke:
             self._draw_ransac_lines(canvas, [lines[0]])
             self._draw_ransac_lines(canvas, [lines[1]])
@@ -59,14 +60,13 @@ class Illustrator:
 
     def _draw_ransac_fill(self, frame, lines):
         if lines is None:
-            raise ValueError("Lines are None")
-            
+            return
         poly = np.concatenate(lines, dtype=np.int32)
         cv2.fillPoly(img=frame, pts=[poly], color=self.fill_color)
 
     def _draw_ransac_lines(self, frame, points):
         if points is None:
-            raise ValueError("Error: argument passed for lines contains no lines.")
+            return
         cv2.polylines(frame, points, isClosed=False, color=self.stroke_color, thickness=3, lineType=cv2.LINE_AA)
 
     def _draw_banner_text(self, frame, text):

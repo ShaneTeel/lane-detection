@@ -1,6 +1,6 @@
 import cv2
 import numpy as np
-from typing import Literal, List
+from typing import Literal
 from utils import StudioManager, ConfigManager
 from preprocessing import Preprocessor
 from line_generators import HoughLineGenerator
@@ -13,7 +13,7 @@ class HoughLaneDetector():
             'canny': {'weak_edge': list(range(0, 301)), 'sure_edge': list(range(0, 301)), 'blur_ksize': list(range(3, 16, 2)), "blur_order": ["before", "after"]},
         },        
         "generator": {
-            'hough': {'rho': None, 'theta': [np.pi / n for n in range(1, 181)], 'thresh': None, 'min_length': None, 'max_gap': None},
+            'hough': {'rho': None, 'theta': list(range(1, 181)), 'thresh': None, 'min_length': None, 'max_gap': None},
         }
     }
 
@@ -23,7 +23,7 @@ class HoughLaneDetector():
             'canny': {'weak_edge': 50, 'sure_edge': 100, 'blur_ksize': 3, "blur_order": "before"},
         },
         "generator": {
-            'hough': {'rho': 1.0, 'theta': np.pi / 180, 'thresh': 50, 'min_length': 10, 'max_gap': 20}
+            'hough': {'rho': 1.0, 'theta': 1, 'thresh': 50, 'min_length': 10, 'max_gap': 20}
         }
     }
     
@@ -96,24 +96,23 @@ class HoughLaneDetector():
     
 if __name__=="__main__":
 
-    # src = "../media/in/lane1-straight.mp4"
-    src = "../media/in/test_img1.jpg"
+    src = "../media/in/lane1-straight.mp4"
+    # src = "../media/in/test_img1.jpg"
 
     roi = np.array([[[100, 540], 
                      [900, 540], 
                      [515, 320], 
                      [450, 320]]], dtype=np.int32)
-        
     user_configs = {
         "preprocessor": {
             'in_range': {'lower_bounds': 150, 'upper_bounds': 255},
-            'canny': {'weak_edge': 50, 'sure_edge': 100, 'blur_ksize': 3, "blur_order": "before"},
+            'canny': {'weak_edge': 50, 'sure_edge': 100, 'blur_ksize': 3, "blur_order": "after"},
         },
         "generator": {
-            'hough': {'rho': 1, 'theta': np.pi / 180, 'thresh': 50, 'min_length': 10, 'max_gap': 20}
+            'hough': {'rho': 1, 'theta': 1, 'thresh': 50, 'min_length': 10, 'max_gap': 20}
         }
     }
 
     hough = HoughLaneDetector(src, roi, user_configs)
 
-    hough.detect()
+    hough.detect(stroke=True, fill=True)
