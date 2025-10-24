@@ -7,44 +7,71 @@ class Controller:
         self.exit = False
         self.source = source
         self.current_frame = 0
+        self.last_frame = self.source.frame_count - 1 if self.source.cap is not None else None
 
-    def _playbackControls(self):
-        while self.paused:
-            key = cv2.waitKey(1) & 0xFF
-            if key in [ord('p'), ord('P'), ord(' ')]:
-                print("Resuming video.")
-                self.paused = False
-            elif key in [ord('q'), ord('Q'), 27]:
-                print("Exiting video player.")
-                self.exit = True
-                break
-            elif key == ord('r'):
-                print(f"Skipping to frame {0 if self.current_frame - 50 <= 0 else self.current_frame - 50}")
-                self.current_frame = max(0, self.current_frame - 50)
-                self.source.cap.set(cv2.CAP_PROP_POS_FRAMES, self.current_frame)
-            elif key == ord('f'):
-                print(f"Skipping to frame {self.source.frame_count - 1 if self.current_frame + 50 > self.source.frame_count - 1 else self.current_frame + 50}")
-                self.current_frame = min(self.source.frame_count - 1, self.current_frame + 50)
-                self.source.cap.set(cv2.CAP_PROP_POS_FRAMES, self.current_frame)
+    def playback_controls(self):
+        if self.source.source_type == "image":
+            cv2.waitKey(0)
+            self.exit = True
+            return self.exit
+        else: 
+            if not self.exit:
+                while self.paused:
+                    key = cv2.waitKey(1) & 0xFF
+                    if key in [ord('p'), ord('P'), ord(' ')]:
+                        print("Resuming video.")
+                        self.paused = False
+                    elif key in [ord('q'), ord('Q'), 27]:
+                        print("Exiting video player.")
+                        self.exit = True
+                        break
+                    elif key == ord('-'):
+                        self.current_frame = (self.current_frame - 50) + self.last_frame if self.current_frame - 50 <= 0 else self.current_frame - 50
+                        print(f"Skipping to frame {0 if self.current_frame - 50 <= 0 else self.current_frame - 50}")
+                        self.source.cap.set(cv2.CAP_PROP_POS_FRAMES, self.current_frame)
+                    elif key == ord('+'):
+                        self.current_frame = (self.current_frame + 50) - self.last_frame if self.current_frame + 50 > self.last_frame else self.current_frame + 50
+                        print(f"Skipping to frame {self.current_frame}")
+                        self.source.cap.set(cv2.CAP_PROP_POS_FRAMES, self.current_frame)
+                    elif key in [ord('r'), ord('R')]:
+                        self.current_frame = 0
+                        print(f"Restarting stream.")
+                        self.source.cap.set(cv2.CAP_PROP_POS_FRAMES, self.current_frame)
+
+                if not self.paused:
+                    key = cv2.waitKey(1) & 0xFF
+                    if key in [ord('p'), ord('P'), ord(' ')]:
+                        self.paused = True
+                        print(f"Pausing at frame {self.current_frame}.")
+                    elif key in [ord('q'), ord('Q'), 27]:
+                        print("Exiting video player.")
+                        self.exit = True
+                    elif key == ord('-'):
+                        self.current_frame = (self.current_frame - 50) + self.last_frame if self.current_frame - 50 <= 0 else self.current_frame - 50
+                        print(f"Skipping to frame {0 if self.current_frame - 50 <= 0 else self.current_frame - 50}")
+                        self.source.cap.set(cv2.CAP_PROP_POS_FRAMES, self.current_frame)
+                    elif key == ord('+'):
+                        self.current_frame = (self.current_frame + 50) - self.last_frame if self.current_frame + 50 > self.last_frame else self.current_frame + 50
+                        print(f"Skipping to frame {self.current_frame}")
+                        self.source.cap.set(cv2.CAP_PROP_POS_FRAMES, self.current_frame)
+                    elif key in [ord('r'), ord('R')]:
+                        self.current_frame = 0
+                        print(f"Restarting stream.")
+                        self.source.cap.set(cv2.CAP_PROP_POS_FRAMES, self.current_frame)
+                    
+                    self.current_frame += 1
+            else:
+                return self.exit
         
-        if not self.paused:
-            key = cv2.waitKey(self.source.fps) & 0xFF
-            if key in [ord('p'), ord(' ')]:
-                self.paused = True
-                print(f"Pausing at frame {self.current_frame}.")
+    def print_playback_menu(self):
 
-            elif key in [ord('q'), ord('Q'), 27]:
-                print("Exiting video player.")
-                self.exit = True
-            
-            elif key == ord('r'):
-                print(f"Skipping to frame {0 if self.current_frame - 50 <= 0 else self.current_frame - 50}")
-                self.current_frame = max(0, self.current_frame - 50)
-                self.source.cap.set(cv2.CAP_PROP_POS_FRAMES, self.current_frame)
-
-            elif key == ord('f'):
-                print(f"Skipping to frame {self.source.frame_count - 1 if self.current_frame + 50 > self.source.frame_count - 1 else self.current_frame + 50}")
-                self.current_frame = min(self.source.frame_count - 1, self.current_frame + 50)
-                self.source.cap.set(cv2.CAP_PROP_POS_FRAMES, self.current_frame)
-            
-            self.current_frame += 1
+        print("-------------------------------------------")
+        print("\t\033[1;4mPlayback Controls\033[0m\n")
+        print("     \033[1mCommand      | Wait Key\033[0m")
+        print("     --------------------------")
+        print("     \033[3mQuit\033[0m         : 'q', 'Q' or ESC")
+        print("     \033[3mPause/Resume\033[0m : 'p', 'P', or SPACE")
+        print("     \033[3mFast-Forward\033[0m : '+'")
+        print("     \033[3mRewind\033[0m       : '-'")
+        print("     \033[3mRestart\033[0m      : 'r', 'R'")
+        print("------------------------------------------")

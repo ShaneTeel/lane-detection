@@ -15,24 +15,12 @@ class Reader():
         self.cap = None
         self.width = None
         self.height = None
+        self.diag = None
+        self.area = None
         self.fps = None
         self.frame_count = None
 
         self._initialize_source()
-
-    def return_frame(self):
-        if self.source_type == 'image':
-            return True, cv2.imread(self.source)
-        
-        if self.cap is None:
-            return False, None
-
-        ret, frame = self.cap.read()
-        
-        if ret:
-            return True, frame
-        else:
-            return False, None
     
     def _initialize_source(self):
         if isinstance(self.source, int):
@@ -62,6 +50,8 @@ class Reader():
             raise ValueError(f"Error: Failed to read image from {self.source}")
         
         self.height, self.width = self.image.shape[:2]
+        self.diag = (self.height**2 + self.width**2) * 0.5
+        self.area = self.height * self.width
         
         _, self.ext = os.path.splitext(os.path.basename(self.source))
         if self.name is None:
@@ -81,6 +71,8 @@ class Reader():
         else:
             self.width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             self.height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            self.diag = (self.height**2 + self.width**2) * 0.5
+            self.area = self.height * self.width
             self.fps = int(self.cap.get(cv2.CAP_PROP_FPS))
             self.frame_count = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
             
@@ -100,7 +92,9 @@ class Reader():
         else:
             self.width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             self.height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            self.fps = self.cap.get(cv2.CAP_PROP_FPS)
+            self.diag = (self.height**2 + self.width**2) * 0.5
+            self.area = self.height * self.width
+            self.fps = int(self.cap.get(cv2.CAP_PROP_FPS))
 
             if self.name is None:
                 self.name = 'camera_' + str(self.source)
@@ -122,6 +116,8 @@ class Reader():
         else:       
             self.width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             self.height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            self.diag = (self.height**2 + self.width**2) * 0.5
+            self.area = self.height * self.width
             self.fps = int(self.cap.get(cv2.CAP_PROP_FPS))
             self.frame_count = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
             self.name, self.ext = os.path.splitext(os.path.basename(self.source.filename))

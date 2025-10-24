@@ -1,17 +1,24 @@
 import cv2
 import numpy as np
 import math
-import streamlit as st
 
 class HoughLineGenerator():
     '''Test'''
+    _DEFAULT_CONFIGS = {
+        'hough': {'rho': 1.0, 'theta': np.radians(1), 'thresh': 50, 'min_length': 10, 'max_gap': 20}
+    }
     
-    def __init__(self, roi, rho, theta, thresh, min_length, max_gap):
-        self.rho = rho
-        self.theta = theta
-        self.thresh = thresh
-        self.min_length = min_length
-        self.max_gap = max_gap
+    def __init__(self, roi, configs):
+        if configs is None:
+            configs = self._DEFAULT_CONFIGS["hough"]
+        else:
+            configs = configs["hough"]
+
+        self.rho = configs["rho"]
+        self.theta = configs["theta"]
+        self.thresh = configs["thresh"]
+        self.min_length = configs["min_length"]
+        self.max_gap = configs["max_gap"]
         self.roi = roi
 
     def fit(self, edge_map):
@@ -19,8 +26,8 @@ class HoughLineGenerator():
         lines = self._fit_lines(edge_map, self.rho, self.theta, self.thresh, self.min_length, self.max_gap)
         if lines is None:
             return None
-        lanes = self._gen_lane_lines(lines, self.roi)
-        return lanes 
+        left, right = self._gen_lane_lines(lines, self.roi)
+        return [left, right] 
 
     def _fit_lines(self, edge_map, rho, theta, thresh, min_length, max_gap):
         lines = cv2.HoughLinesP(edge_map, rho, theta, thresh, min_length, max_gap)
@@ -36,28 +43,28 @@ class HoughLineGenerator():
             return self._gen_line_of_best_fit(lanes_classified, poly)
     
     def _gen_line_of_best_fit(self, lanes, poly):
-        yMin = min(poly[0][0][1], poly[0][-1][1])
-        yMax = max(poly[0][0][1], poly[0][-1][1])
+        y_min = int(min(poly[0, 0, 1], poly[0, -1, 1]))
+        y_max = int(max(poly[0, 0, 1], poly[0, -1, 1]))
 
         for lateral in lanes.keys():
-            lanes[lateral]['mAvg'] = self._calc_avg(lanes[lateral]['m'])
-            lanes[lateral]['bAvg'] = self._calc_avg(lanes[lateral]['b'])
+            lanes[lateral]['m_avg'] = self._calc_avg(lanes[lateral]['m'])
+            lanes[lateral]['b_avg'] = self._calc_avg(lanes[lateral]['b'])
 
-            if math.isinf(lanes[lateral]['mAvg']) or math.isinf(lanes[lateral]['bAvg']):
+            if math.isinf(lanes[lateral]['m_avg']) or math.isinf(lanes[lateral]['b_avg']):
                 raise ValueError("Error: Infinite float.")
             
-            if abs(lanes[lateral]['mAvg']) < 1e-6:
+            if abs(lanes[lateral]['m_avg']) < 1e-6:
                 continue
             
-            xMin = int((yMin - lanes[lateral]['bAvg']) // lanes[lateral]['mAvg'])
-            xMax = int((yMax - lanes[lateral]['bAvg']) // lanes[lateral]['mAvg'])
-            lanes[lateral]['line'].append([xMin, yMin, xMax, yMax])
+            x_min = int((y_min - lanes[lateral]['b_avg']) // lanes[lateral]['m_avg'])
+            x_max = int((y_max - lanes[lateral]['b_avg']) // lanes[lateral]['m_avg'])
+            lanes[lateral]['line'] = [x_min, y_min, x_max, y_max]
 
-        return [lanes['left']['line'], lanes['right']['line']]
+        return lanes['left']['line'], lanes['right']['line']
 
     def _classify_lines(self, lines):
-        lanes = {'left': {'m': [], 'b': [], 'mAvg': 0, 'bAvg': 0, 'line': []},
-                'right': {'m': [], 'b': [], 'mAvg': 0, 'bAvg': 0, 'line': []}}
+        lanes = {'left': {'m': [], 'b': [], 'm_avg': 0, 'b_avg': 0, 'line': None},
+                'right': {'m': [], 'b': [], 'm_avg': 0, 'b_avg': 0, 'line': None}}
         for line in lines:
             m, b = self._calc_slope_intercept(*line)
             if m is not None:

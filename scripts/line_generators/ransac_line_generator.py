@@ -29,7 +29,7 @@ class RANSACLineGenerator():
             pts_split = self._point_splitting(pts)
             pts_filtered = self._point_filtering(pts_split, **self.filtering_params)
             fit = self._ransac_polyfit(pts_filtered, **self.polyfit_params)
-            return edge_map, fit
+            return fit
 
     def _point_extraction(self, edge_map):
         edge_pts = np.where(edge_map != 0)

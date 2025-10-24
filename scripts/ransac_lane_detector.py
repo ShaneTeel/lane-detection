@@ -1,6 +1,6 @@
 import cv2
 import numpy as np
-import numpy.typing as npt
+from typing import Literal
 from utils import StudioManager, ConfigManager
 from preprocessing import Preprocessor
 from line_generators import RANSACLineGenerator
@@ -29,7 +29,7 @@ class RANSACLaneDetector():
         }
     }
 
-    def __init__(self, source, roi:npt.NDArray = None, configs:dict = None, stroke_color:tuple = (0, 0, 255), fill_color:tuple=(0, 255, 0)):
+    def __init__(self, source, roi:np.ndarray = None, configs:dict = None, stroke_color:tuple = (0, 0, 255), fill_color:tuple=(0, 255, 0), alpha:float=0.8, beta:float=0.3):
 
         if configs is None:
             pre_configs, gen_configs = self._DEFAULT_RANSAC_CONFIGS['preprocessor'], self._DEFAULT_RANSAC_CONFIGS['generator']
@@ -40,11 +40,49 @@ class RANSACLaneDetector():
         self.roi = self._roi_validation(roi)
         self.preprocess = Preprocessor(self.roi, pre_configs)
         self.generate = RANSACLineGenerator(self.roi, gen_configs)
-        self.studio = StudioManager(source, stroke_color, fill_color)
+        self.studio = StudioManager(source, stroke_color, fill_color, alpha, beta)
 
+    def detect(self, view_style: Literal["inset", "mosaic", "composite"] = "inset", stroke:bool=False, fill:bool=True):
+        frame_names = self._get_frame_names(view_style)
+
+        win_name = f"{self.studio.source.name} {view_style} View"
+        cv2.namedWindow(win_name)
+
+        if self.studio.playback is not None:
+            self.studio.playback.print_playback_menu()
+        while True:
+            ret, frame = self.studio.return_frame()
+            if not ret:
+                break
+            else:
+                roi_mask, edge_map = self.preprocess.preprocess(frame)
+                fit = self.generate.fit(edge_map)
+                frame_lst = [frame, roi_mask, edge_map]
+                final = self.studio.gen_ransac_view(frame_lst, frame_names, fit, view_style, stroke=stroke, fill=fill)
+
+                cv2.imshow(win_name, final)
+                if self.studio.playback.playback_controls():
+                    break
+
+    def _get_frame_names(self, view_style):
+        view_style_names = {
+            "inset": ["Original", "Threshold", "Edge Map"],
+            "product": ["RANSAC Composite"],
+            "mosaic": ["Original", "Threshold", "Edge Map", "RANSAC Composite"]
+        }
+        try:
+            names = view_style_names[view_style]
+            return names
+        except Exception as e:
+            raise KeyError(f"ERROR: Invalid argument passed to 'view_style'. Must be one of {[key for key in view_style_names.keys()]}")
+
+    def _get_configs(self, user_configs, default_configs, valid_config_setup):
+        config_mngr = ConfigManager(user_configs=user_configs, default_configs=default_configs, valid_config_setup=valid_config_setup)
+        final = config_mngr.manage()
+        return final['preprocessor'], final['generator']
+    
     def _roi_validation(self, roi):
-        expected_shape = (1, 4, 2)
-        if roi.shape == expected_shape:
+        if roi.shape == (1, 4, 2):
             return roi
         else:
             try:
@@ -52,33 +90,10 @@ class RANSACLaneDetector():
             except Exception as e:
                 raise ValueError(e)
 
-    def detect(self, names:list = None):
-        if names is None:
-            names = ["Raw", "Thresh", "Edge", "Composite"]
-        while True:
-            ret, frame = self.studio.source.return_frame()
-            if not ret:
-                break
-            else:
-                _, roi_mask, edge_map = self.preprocess.preprocess(frame)
-                edge_map, fit = self.generate.fit(edge_map)
-                composite = self.studio.draw.draw_curved_stroke_fill(frame, fit, stroke=False)
-                final = self.studio.render.render_final_view([frame, roi_mask, edge_map, composite], names)
-
-                cv2.imshow("test", final)
-                key = cv2.waitKey(1)
-                if key == 27 or key == 32:
-                    break
-
-    def _get_configs(self, user_configs, default_configs, valid_config_setup):
-        config_mngr = ConfigManager(user_configs=user_configs, default_configs=default_configs, valid_config_setup=valid_config_setup)
-        final = config_mngr.manage()
-        return final['preprocessor'], final['generator']
-
 if __name__ == "__main__":
 
-    source = "media/in/lane1-straight.mp4"
-    # source = "media/in/test_img1.jpg"
+    source = "../media/in/lane1-straight.mp4"
+    # source = "../media/in/test_img1.jpg"
 
     roi = np.array([[[100, 540], 
                      [900, 540], 
@@ -98,12 +113,11 @@ if __name__ == "__main__":
 
     detector = RANSACLaneDetector(source, roi, user_configs)
 
-    detector.detect()
+    detector.detect("mosaic")
 
 
 """
 Tasks:
-	# 1. Config manager
 	2. ROI Calculator
 	3. Standardize RANSAC and HOUGHP
 	4. Find a way to add the intermediate step images to the final image (top row)

@@ -1,10 +1,9 @@
 import cv2
 import numpy as np
-import numpy.typing as npt
 
 class Preprocessor:
 
-    def __init__(self, roi:npt.NDArray = None, configs:dict=None):
+    def __init__(self, roi:np.ndarray = None, configs:dict=None):
         self.roi = None if roi is None else roi
         self.in_range_params = configs["in_range"]
         self.canny_params = configs["canny"]
@@ -13,7 +12,7 @@ class Preprocessor:
         thresh = self._threshold_img(frame, **self.in_range_params)
         masked = self._inverse_roi_mask(thresh, self.roi)
         edge_map = self._generate_edge_map(masked, **self.canny_params)
-        return thresh, masked, edge_map
+        return masked, edge_map
 
     def _threshold_img(self, frame, lower_bounds, upper_bounds):
         img = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
