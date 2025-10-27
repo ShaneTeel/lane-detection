@@ -7,6 +7,15 @@ class ROIManager():
 
         pass
 
+    def _roi_validation(self, roi):
+        if roi.shape == (1, 4, 2):
+            return roi
+        else:
+            try:
+                return roi.reshape(1, 4, 2)
+            except Exception as e:
+                raise ValueError(e)
+
     def _roi_heuristics(self, frame):
         
         h, w = frame.shape[:2]
@@ -71,7 +80,7 @@ if __name__ == "__main__":
     frame = cv2.imread('media/in/test_img1.jpg')
     hist = cv2.calcHist([frame], [0], None, [256], [0, 256])
 
-    test = ROIManager()
+    test = ROISegmentor()
 
     roi = test._edge_density_roi(frame)
 

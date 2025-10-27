@@ -27,7 +27,7 @@ class Controller:
                         break
                     elif key == ord('-'):
                         self.current_frame = (self.current_frame - 50) + self.last_frame if self.current_frame - 50 <= 0 else self.current_frame - 50
-                        print(f"Skipping to frame {0 if self.current_frame - 50 <= 0 else self.current_frame - 50}")
+                        print(f"Skipping to frame {self.current_frame}")
                         self.source.cap.set(cv2.CAP_PROP_POS_FRAMES, self.current_frame)
                     elif key == ord('+'):
                         self.current_frame = (self.current_frame + 50) - self.last_frame if self.current_frame + 50 > self.last_frame else self.current_frame + 50
@@ -48,7 +48,7 @@ class Controller:
                         self.exit = True
                     elif key == ord('-'):
                         self.current_frame = (self.current_frame - 50) + self.last_frame if self.current_frame - 50 <= 0 else self.current_frame - 50
-                        print(f"Skipping to frame {0 if self.current_frame - 50 <= 0 else self.current_frame - 50}")
+                        print(f"Skipping to frame {self.current_frame}")
                         self.source.cap.set(cv2.CAP_PROP_POS_FRAMES, self.current_frame)
                     elif key == ord('+'):
                         self.current_frame = (self.current_frame + 50) - self.last_frame if self.current_frame + 50 > self.last_frame else self.current_frame + 50

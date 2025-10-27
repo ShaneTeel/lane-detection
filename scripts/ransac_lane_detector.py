@@ -2,19 +2,19 @@ import cv2
 import numpy as np
 from typing import Literal
 from utils import StudioManager, ConfigManager
-from preprocessing import Preprocessor
+from preprocessing import Preprocessor, ROIManager
 from line_generators import RANSACLineGenerator
 
 class RANSACLaneDetector():
 
     _VALID_RANSAC_SETUP = {
         "preprocessor": {
-            'in_range': {'lower_bounds': list(range(0, 255)), 'upper_bounds': list(range(1, 256))},
-            'canny': {'weak_edge': list(range(0, 301)), 'sure_edge': list(range(0, 301)), 'blur_ksize': list(range(3, 16, 2)), "blur_order": ["before", "after"]},
+            'in_range': {'lower_bounds': [0, 255], 'upper_bounds': [0, 255]},
+            'canny': {'weak_edge': [0, 301], 'sure_edge': [0, 301], 'blur_ksize': [3, 15], "blur_order": ["before", "after"]}
         },        
         "generator": {
-            'filter': {'filter_type': ['median', 'mean'], 'n_std': np.arange(0.0, 3.1, 0.01).tolist()},
-            'polyfit': {'n_iter': list(range(1, 101)), 'degree': [1, 2, 3], 'threshold': list(range(0, 101)), 'min_inliers': np.arange(0.0, 1.00, 0.01), 'weight': list(range(1, 11)), "factor": np.arange(0.0, 1.00, 0.01)},
+            'filter': {'filter_type': ['median', 'mean'], 'n_std': [0.0, 3.0]},
+            'polyfit': {'n_iter': [0, 100], 'degree': [1, 2, 3], 'threshold': [0, 100], 'min_inliers': [0.0, 1.0], 'weight': [1, 10], "factor": [0.0, 1.0]},
         }
     }
 
@@ -29,7 +29,7 @@ class RANSACLaneDetector():
         }
     }
 
-    def __init__(self, source, roi:np.ndarray = None, configs:dict = None, stroke_color:tuple = (0, 0, 255), fill_color:tuple=(0, 255, 0), alpha:float=0.8, beta:float=0.3):
+    def __init__(self, source, roi:np.ndarray = None, configs:dict = None, stroke_color:tuple = (0, 0, 255), fill_color:tuple=(0, 255, 0)):
 
         if configs is None:
             pre_configs, gen_configs = self._DEFAULT_RANSAC_CONFIGS['preprocessor'], self._DEFAULT_RANSAC_CONFIGS['generator']
@@ -40,9 +40,9 @@ class RANSACLaneDetector():
         self.roi = self._roi_validation(roi)
         self.preprocess = Preprocessor(self.roi, pre_configs)
         self.generate = RANSACLineGenerator(self.roi, gen_configs)
-        self.studio = StudioManager(source, stroke_color, fill_color, alpha, beta)
+        self.studio = StudioManager(source, stroke_color, fill_color)
 
-    def detect(self, view_style: Literal["inset", "mosaic", "composite"] = "inset", stroke:bool=False, fill:bool=True):
+    def detect(self, view_style: Literal["inset", "mosaic", "composite"]="inset", stroke:bool=False, fill:bool=True, save:bool = False):        
         frame_names = self._get_frame_names(view_style)
 
         win_name = f"{self.studio.source.name} {view_style} View"
@@ -50,6 +50,10 @@ class RANSACLaneDetector():
 
         if self.studio.playback is not None:
             self.studio.playback.print_playback_menu()
+
+        if save:
+            self.studio.write._initialize_writer()
+
         while True:
             ret, frame = self.studio.return_frame()
             if not ret:
@@ -58,9 +62,13 @@ class RANSACLaneDetector():
                 roi_mask, edge_map = self.preprocess.preprocess(frame)
                 fit = self.generate.fit(edge_map)
                 frame_lst = [frame, roi_mask, edge_map]
-                final = self.studio.gen_ransac_view(frame_lst, frame_names, fit, view_style, stroke=stroke, fill=fill)
+                final = self.studio.gen_view(frame_lst, frame_names, fit, view_style, stroke=stroke, fill=fill)
 
                 cv2.imshow(win_name, final)
+
+                if save:
+                    self.studio.write.writer.write(final)
+
                 if self.studio.playback.playback_controls():
                     break
 
@@ -113,4 +121,4 @@ if __name__ == "__main__":
 
     detector = RANSACLaneDetector(source, roi, user_configs)
 
-    detector.detect("mosaic")
+    detector.detect("inset", True, True)

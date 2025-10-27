@@ -5,69 +5,39 @@ import numpy as np
 class Illustrator:
     '''Superimposes shapes/lines on an image'''
 
-    def __init__(self, stroke_color:tuple = (0, 0, 255), fill_color:tuple = (0, 255, 0), alpha:float=0.8, beta:float=0.3):
+    def __init__(self, stroke_color:tuple = (0, 0, 255), fill_color:tuple = (0, 255, 0)):
         
         self.stroke_color = self._hex_to_bgr(stroke_color)
         self.fill_color = self._hex_to_bgr(fill_color)
-        self.alpha = alpha
-        self.beta = beta
     
-    def _gen_hough_composite(self, frame, lines, stroke:bool=True, fill:bool=True):
+    def gen_composite(self, frame, lines, stroke:bool=True, fill:bool=True):
         if not stroke and not fill:
             assert AssertionError("ERROR: One of `stroke` or `fill` must be `True`. Both cannot be `False`.")
         canvas = np.zeros_like(frame)
         left, right = lines
         if left is None and right is None:
             print("No lines found, skipping")
-            return cv2.addWeighted(frame, self.alpha, canvas, self.beta, 0.0)
+            return cv2.addWeighted(frame, 0.8, canvas, 0.3, 0.0)
         if stroke:
-            self._draw_hough_lines(canvas, left)
-            self._draw_hough_lines(canvas, right)
+            self._draw_lines(canvas, [left])
+            self._draw_lines(canvas, [right])
         if fill:
             if left is None or right is None:
                 print("Left or right lane lines not found, skipping fill")
-                return cv2.addWeighted(frame, self.alpha, canvas, self.beta, 0.0)
-            self._draw_hough_fill(left, right, canvas)
-        return cv2.addWeighted(frame, self.alpha, canvas, self.beta, 0.0)
+                return cv2.addWeighted(frame, 0.8, canvas, 0.3, 0.0)
+            self._draw_fill(lines, canvas)
+        return cv2.addWeighted(frame, 0.8, canvas, 0.3, 0.0)
 
-    def _draw_hough_lines(self, img, line):
+    def _draw_lines(self, img, line):
         if line is None:
             print("No lines, skipping.")
             return
         else:
-            line = np.array((line[:2], line[2:]), dtype=np.int32)
-            cv2.polylines(img, [line], isClosed=False, color=self.stroke_color, thickness=3, lineType=cv2.LINE_AA)
+            cv2.polylines(img, line, isClosed=False, color=self.stroke_color, thickness=3, lineType=cv2.LINE_AA)
 
-    def _draw_hough_fill(self, left, right, frame):
-        poly = np.array([left[:2], left[2:], right[2:], right[:2]], dtype='int32').reshape(1, 4, 2)
-        cv2.fillPoly(img=frame, pts=poly, color=self.fill_color)
-
-    def _gen_ransac_composite(self, frame, lines, stroke:bool=True, fill:bool=True):
-        if not stroke and not fill:
-            assert AssertionError("ERROR: One of `stroke` or `fill` must be `True`. Both cannot be `False`.")
-
-        canvas = np.zeros_like(frame)
-        left, right = lines
-        if left is None and right is None:
-            return cv2.addWeighted(frame, self.alpha, canvas, self.beta, 0.0)
-        if stroke:
-            self._draw_ransac_lines(canvas, [lines[0]])
-            self._draw_ransac_lines(canvas, [lines[1]])
-        if fill:
-            self._draw_ransac_fill(canvas, lines)
-
-        return cv2.addWeighted(frame, self.alpha, canvas, self.beta, 0.0)
-
-    def _draw_ransac_fill(self, frame, lines):
-        if lines is None:
-            return
+    def _draw_fill(self, lines, frame):
         poly = np.concatenate(lines, dtype=np.int32)
         cv2.fillPoly(img=frame, pts=[poly], color=self.fill_color)
-
-    def _draw_ransac_lines(self, frame, points):
-        if points is None:
-            return
-        cv2.polylines(frame, points, isClosed=False, color=self.stroke_color, thickness=3, lineType=cv2.LINE_AA)
 
     def _draw_banner_text(self, frame, text):
         frame = self._channel_checker(frame)

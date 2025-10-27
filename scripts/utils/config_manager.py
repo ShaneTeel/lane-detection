@@ -1,4 +1,3 @@
-import numpy as np
 import copy
 
 class ConfigManager():
@@ -65,17 +64,24 @@ class ConfigManager():
 
                     # Extract valid arguments for each param
                     valid_args = self.valid_config_setup[event][step][param]
-                    
+
+
         
                     # If valid arg of type int or float
+                    if valid_args is None:
+                        continue
+                    
                     if isinstance(valid_args[0], int) or isinstance(valid_args[0], float):
                         
+                        min_valid = valid_args[0]
+                        max_valid = valid_args[-1]
+
                         # Check 3A: If proposed arg in valid arg
-                        if proposed_arg not in valid_args:
+                        if not min_valid <= proposed_arg <= max_valid:
 
                             # If not, raise ValueError
-                            condition = f"{min(valid_args)} - {max(valid_args)}" if len(valid_args) > 10 else f"{valid_args}"
-                            raise ValueError(f"ERROR: User configuration includes invalid argument ({proposed_arg}) for parameter {param} in step {step} of event {event}.\n\t\tMust be of type {type(valid_args[0])} and in the range of {condition}.")
+                            condition = f"{min_valid} - {max_valid}"
+                            raise ValueError(f"ERROR: User configuration includes invalid argument ({proposed_arg}) for parameter {param} in step {step} of event {event}.\n\t\tMust be of type {type(min_valid)} and in the range of {condition}.")
                 
                     # If valid arg of type str
                     if isinstance(valid_args[0], str):

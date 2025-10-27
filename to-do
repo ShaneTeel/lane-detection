@@ -1,8 +1,10 @@
 Tasks:
 	2. ROI Calculator
-	3. Standardize RANSAC and HOUGHP
 	5. Hyperparameter Tuning
 	6. Batch Processing
 	7. Clean-up RANSAC lines (they are innacurate with a great amount of variance)
         7a. Generate lines that reach the min/max of the selected/calculated ROI
 	8. Clean up ConfigManager and configuration management as a whole. 
+	9. Auto-calc best resize for both mosaic and inset view
+
+	10. If get to curved line with houghlinesP, fix the lane edge to the inside of the edge detected, NOT the outside. 

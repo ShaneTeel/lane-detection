@@ -1,9 +1,22 @@
 import cv2
 import numpy as np
 
-class Preprocessor:
+class EdgeDetector():
 
+    _VALID_SETUP = {
+            'in_range': {'lower_bounds': [0, 255], 'upper_bounds': [0, 255]},
+            'canny': {'weak_edge': [0, 301], 'sure_edge': [0, 301], 'blur_ksize': [3, 15], "blur_order": ["before", "after"]}
+        }
+
+    _DEFAULT_CONFIGS = {
+            'in_range': {'lower_bounds': 150, 'upper_bounds': 255},
+            'canny': {'weak_edge': 50, 'sure_edge': 100, 'blur_ksize': 3, "blur_order": "after"}
+        }
+    
     def __init__(self, roi:np.ndarray = None, configs:dict=None):
+        if configs is None:
+            configs = self._DEFAULT_CONFIGS
+
         self.roi = None if roi is None else roi
         self.lower_bounds = configs["in_range"].get("lower_bounds")
         self.upper_bounds = configs["in_range"].get("upper_bounds")

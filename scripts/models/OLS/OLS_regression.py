@@ -1,0 +1,2 @@
+class OLSRegression():
+    pass

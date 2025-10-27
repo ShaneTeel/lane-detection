@@ -2,40 +2,33 @@ import cv2
 import numpy as np
 from typing import Literal
 from utils import StudioManager, ConfigManager
-from preprocessing import Preprocessor
-from line_generators import HoughLineGenerator
+from preprocessing import ROIManager, Preprocessor
+from line_generators import StraightLineGenerator
 
-class HoughLaneDetector():
+class StraightLaneDetector():
 
     _VALID_HOUGH_SETUP = {
         "preprocessor": {
-            'in_range': {'lower_bounds': list(range(0, 255)), 'upper_bounds': list(range(1, 256))},
-            'canny': {'weak_edge': list(range(0, 301)), 'sure_edge': list(range(0, 301)), 'blur_ksize': list(range(3, 16, 2)), "blur_order": ["before", "after"]},
+            'in_range': {'lower_bounds': [0, 255], 'upper_bounds': [0, 255]},
+            'canny': {'weak_edge': [0, 301], 'sure_edge': [0, 301], 'blur_ksize': [3, 15], "blur_order": ["before", "after"]}
         },        
         "generator": {
-            'hough': {'rho': None, 'theta': list(range(1, 181)), 'thresh': None, 'min_length': None, 'max_gap': None},
+            'hough': {'rho': None, 'theta': [1, 180], 'thresh': None, 'min_length': None, 'max_gap': None}
         }
     }
 
     _DEFAULT_HOUGH_CONFIGS = {
         "preprocessor": {
             'in_range': {'lower_bounds': 150, 'upper_bounds': 255},
-            'canny': {'weak_edge': 50, 'sure_edge': 100, 'blur_ksize': 3, "blur_order": "before"},
+            'canny': {'weak_edge': 50, 'sure_edge': 100, 'blur_ksize': 3, "blur_order": "after"}
         },
-        "generator": {
-            'hough': {'rho': 1.0, 'theta': 1, 'thresh': 50, 'min_length': 10, 'max_gap': 20}
+        "estimator": {
+            'hough': {'rho': 1, 'theta': 1, 'thresh': 50, 'min_length': 10, 'max_gap': 20},
+            'linear': {}
         }
     }
-    
-    def __init__(self, source, roi:np.ndarray, configs:dict, stroke_color:tuple=(0, 0, 255), fill_color:tuple=(0, 255, 0), alpha:float=0.8, beta:float=0.3):
 
-        self.studio = StudioManager(source, stroke_color, fill_color, alpha, beta)
-        
-        self._VALID_HOUGH_SETUP["generator"]["hough"]["rho"] = np.arange(0.1, self.studio.source.diag + 1.0, 0.1).tolist()
-        self._VALID_HOUGH_SETUP["generator"]["hough"]["thresh"] = list(range(1, self.studio.source.area + 1))
-        self._VALID_HOUGH_SETUP["generator"]["hough"]["min_length"] = list(range(1, int(self.studio.source.diag) + 1))
-        self._VALID_HOUGH_SETUP["generator"]["hough"]["max_gap"] = list(range(1, int(self.studio.source.diag) + 1))
-
+    def __init__(self, source, roi:np.ndarray, configs:dict=None, stroke_color:tuple=(0, 0, 255), fill_color:tuple=(0, 255, 0)):
         if configs is None:
             pre_configs, gen_configs = self._DEFAULT_HOUGH_CONFIGS['preprocessor'], self._DEFAULT_HOUGH_CONFIGS["generator"]
         else:
@@ -43,9 +36,10 @@ class HoughLaneDetector():
 
         self.roi = self._roi_validation(roi)
         self.preprocessor = Preprocessor(self.roi, pre_configs)
-        self.generator = HoughLineGenerator(self.roi, gen_configs)
+        self.generate = StraightLineGenerator(self.roi, gen_configs)
+        self.studio = StudioManager(source, stroke_color, fill_color)
         
-    def detect(self, view_style: Literal["inset", "mosaic", "composite"]="inset", stroke:bool=False, fill:bool=True):        
+    def detect(self, view_style: Literal[None, "inset", "mosaic", "composite"]="inset", stroke:bool=False, fill:bool=True, save:bool = False):        
         win_name = f"{self.studio.source.name} {view_style} View"
         cv2.namedWindow(win_name)
         
@@ -53,6 +47,9 @@ class HoughLaneDetector():
 
         if self.studio.source.source_type != "image":
             self.studio.playback.print_playback_menu()
+        
+        if save:
+            self.studio.write._initialize_writer()
         
         while True:
             ret, frame = self.studio.return_frame()
@@ -62,9 +59,13 @@ class HoughLaneDetector():
                 roi_mask, edge_map = self.preprocessor.preprocess(frame)
                 fit = self.generator.fit(edge_map)
                 frame_lst = [frame, roi_mask, edge_map]
-                final = self.studio.gen_hough_view(frame_lst, frame_names, fit, view_style, stroke=stroke, fill=fill)
+                final = self.studio.gen_view(frame_lst, frame_names, fit, view_style, stroke=stroke, fill=fill)
 
                 cv2.imshow(win_name, final)
+
+                if save:
+                    self.studio.write.writer.write(final)
+
                 if self.studio.playback.playback_controls():
                     break
 
@@ -96,23 +97,14 @@ class HoughLaneDetector():
     
 if __name__=="__main__":
 
-    src = "../media/in/lane1-straight.mp4"
-    # src = "../media/in/test_img1.jpg"
+    # src = "../media/in/lane1-straight.mp4"
+    src = "../media/in/test_img1.jpg"
 
     roi = np.array([[[100, 540], 
                      [900, 540], 
                      [515, 320], 
                      [450, 320]]], dtype=np.int32)
-    user_configs = {
-        "preprocessor": {
-            'in_range': {'lower_bounds': 150, 'upper_bounds': 255},
-            'canny': {'weak_edge': 50, 'sure_edge': 100, 'blur_ksize': 3, "blur_order": "after"},
-        },
-        "generator": {
-            'hough': {'rho': 1, 'theta': 1, 'thresh': 50, 'min_length': 10, 'max_gap': 20}
-        }
-    }
 
-    hough = HoughLaneDetector(src, roi, user_configs)
+    hough = PPHTQuadraticLaneDetector(src, roi)
 
-    hough.detect(stroke=True, fill=True)
+    hough.detect("composite", stroke=True, fill=True)

@@ -10,8 +10,6 @@ class Writer():
         self.height = source.height
         self.fps = source.fps
         self.writer = None
-        
-        self._initialize_writer()
     
     def save_object(self, frame):
         self.writer.write(frame)

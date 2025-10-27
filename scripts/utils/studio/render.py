@@ -15,11 +15,11 @@ class Render:
     def render_inset(self, composite:np.ndarray, frames:list):
         triptych = self._render_triptych(frames)
         _, cw = composite.shape[:2]
+        
         triptych = self._resize_frame(triptych, cw)
         th, _ = triptych.shape[:2]
     
         composite[0:th, :] = triptych
-
         return composite
 
     def _render_diptych(self, frames:list):
