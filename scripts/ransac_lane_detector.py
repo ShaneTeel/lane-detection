@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 from typing import Literal
 from utils import StudioManager, ConfigManager
-from preprocessing import Preprocessor, ROIManager
+from preprocessing import EdgeDetector, ROIManager
 from line_generators import RANSACLineGenerator
 
 class RANSACLaneDetector():

@@ -30,7 +30,7 @@ class FindNonZero():
         left = pts[pts[:, 0] < x_mid]
         right = pts[pts[:, 0] >= x_mid]
 
-        return [left, right] 
+        return [left, right]
 
     def _point_filtering(self, lanes, filter_type:Literal['median', 'mean']="median", n_std:float=2.0):
         lanes_filtered = []

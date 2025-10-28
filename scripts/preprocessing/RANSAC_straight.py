@@ -1,9 +1,7 @@
 import numpy as np
-import math
 
 class StraightLineGenerator:
     '''Test'''
-    _DEFAULT_CONFIGS = {'hough': {'rho': 1, 'theta': 1, 'thresh': 50, 'min_length': 10, 'max_gap': 20}}
     
     def __init__(self, y_min, y_max):
 
@@ -16,23 +14,25 @@ class StraightLineGenerator:
         
         fit = []
         for lane in lanes:
-            m = []
-            b = []
+            slope = []
+            intercept = []
+            print(f"DEBUG (PT): {pt}")
 
             for pt in lane:
-                X = lane[0]
-                y = lane[1]
+                print(f"DEBUG (PT): {pt}")
+                X = pt[0]
+                y = pt[1]
                 m, b = self._calc_slope_intercept(X, y)
-                m.append(m)
-                b.append(b)
+                slope.append(m)
+                intercept.append(b)
             
-            m_avg = self._calc_avg(m)
-            b_avg = self._calc_avg(b)
-            start, stop = self._get_best_fit(X, y, m_avg, b_avg)
+            m_avg = self._calc_avg(slope)
+            b_avg = self._calc_avg(intercept)
+            start, stop = self._get_best_fit(m_avg, b_avg)
             fit.append([start, stop])
         return np.array(fit).reshape(-1, 2)
 
-    def _get_best_fit(self, X, y, m_avg, b_avg):
+    def _get_best_fit(self, m_avg, b_avg):
         x1 = int((self.y_max - b_avg) / m_avg)
         x2 = int((self.y_min - b_avg) / m_avg)
         return [[x1, self.y_max], [x2, self.y_min]]
@@ -41,6 +41,7 @@ class StraightLineGenerator:
         if X is None or y is None:
             raise ValueError(f"Error: {X} or {y} == 'NoneType'")
         else:
+            print(X)
             
             mean_x = self._calc_avg(X)
             mean_y = self._calc_avg(y)

@@ -53,7 +53,7 @@ class RANSACRegression():
             # Get best coeffs
             best_coeffs = self._best_coeffs(X, y, n_iter, degree, threshold, min_inliers, weight)
 
-            # Generate Curved Lines
+            # Generate Smoothed Lines
             if degree == 2:
                 points = self.straight.fit(best_coeffs)
             points = self._gen_smoothed_curved_lines(best_coeffs, direction, factor)
@@ -66,7 +66,6 @@ class RANSACRegression():
         y = lane[:, 1]
 
         # Normalize values for polyfit
-        X, y, threshold, 
         X, y, threshold = self._min_max_scaler(X, y, threshold)
 
         # Constrain y to prevent inaccruate line response
@@ -87,7 +86,7 @@ class RANSACRegression():
 
     def _best_coeffs(self, X, y, n_iter:int=100, degree:int=2, threshold:int=20, min_inliers:float=0.6, weight:int = 5):
 
-        # Create best coeffs function variables
+        # Create variables
         poly_size = degree + 1
         best_inliers = None
         best_inlier_count = 0
@@ -96,6 +95,7 @@ class RANSACRegression():
         sample_size = min(max(degree+3, 5), n_points)
         
         for _ in range(n_iter):
+
             # Random sampling
             sample_idx = np.random.choice(n_points, size=sample_size, replace=False)
             sample_X = X[sample_idx]
@@ -111,7 +111,7 @@ class RANSACRegression():
             except (np.linalg.LinAlgError, TypeError, ValueError):
                 continue
 
-            # Evaluate fit on all points
+            # Evaluate sample fit on all points
             y_pred = np.polyval(coeffs, X)
             errors = np.abs(sum(y - y_pred) ** 2)
 
@@ -155,7 +155,6 @@ class RANSACRegression():
     
     def _gen_smoothed_curved_lines(self, best_coeffs, direction, factor:float = 0.3):
         # Gen curve in scaled space
-
         x_scaled = np.linspace(0, 1, 100)
         y_scaled = np.polyval(best_coeffs, x_scaled)
 

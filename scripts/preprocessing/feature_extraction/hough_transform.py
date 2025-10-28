@@ -46,7 +46,7 @@ class HoughTransform():
                 left.append(line)
             if start_x >= x_mid and stop_x >= x_mid:
                 right.append(line)
-        return [np.array(left).reshape(-1, 2), np.array(right).reshape(-1, 2)]
+        return [left, right]
     
     def _point_filtering(self, lanes, filter_type:str =['median', 'mean'], n_std:float=2.0):
         lanes_filtered = []
@@ -54,7 +54,9 @@ class HoughTransform():
         # Lane X-Val Filter
         for lane in lanes:
             if lane is not None:
-                X = lane[:, 0]
+                X1 = lane[:, 0]
+                X2 = lane[:, 2]
+                X = np.concatenate
                 X_center = np.median(X) if filter_type == "median" else np.mean(X)
                 X_std = np.std(X)
 

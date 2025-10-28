@@ -4,7 +4,7 @@ import numpy as np
 class RANSACCurvedLineGenerator():
     '''Test'''
     _DEFAULT_CONFIGS = {
-        'hough': {'rho': 1.0, 'theta': 1, 'thresh': 50, 'min_length': 10, 'max_gap': 20}
+        'polyfit': {'n_iter': 100, 'degree': 2, 'threshold': 50, 'min_inliers': 0.6, 'weight': 5, 'factor': 0.1}
     }
     
     def __init__(self, roi, configs):
