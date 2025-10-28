@@ -1,1 +1,1 @@
-from .RANSAC_regression import RANSACRegression
+from .ransac_manager import RANSACManager

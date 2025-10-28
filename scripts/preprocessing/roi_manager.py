@@ -3,6 +3,19 @@ from scipy.signal import find_peaks
 
 class ROIManager():
 
+    def __init__(self, roi:np.ndarray=None):
+        self.roi = self._roi_validation(roi)
+        self.x_mid = None
+        self.y_max = None
+        self.y_min = None
+
+        self._roi_extraction()
+
+    def _roi_extraction(self):
+        self.x_mid = self.roi[:, :, 0].mean()
+        self.y_min = int(min(self.roi[0, 0, 1], self.roi[0, -1, 1]))
+        self.y_max = int(max(self.roi[0, 0, 1], self.roi[0, -1, 1]))
+
     def _vanishing_point_roi(self):
 
         pass
@@ -73,6 +86,8 @@ class ROIManager():
             img = cv2.Canny(thresh, weak_edge, sure_edge)
             img = cv2.GaussianBlur(img, kernel, 0)
         return img
+    
+
 
 if __name__ == "__main__":
     import cv2
