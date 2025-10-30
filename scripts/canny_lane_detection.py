@@ -2,40 +2,44 @@ import cv2
 from typing import Literal
 from numpy.typing import NDArray
 from studio import StudioManager
-from preprocessing import ConfigManager, ROISelector, EdgeMapGenerator, EdgePointExtractor
-from models import OLSRegression
+from preprocessing import ConfigManager, ROISelector, CannyFeatureEngineer, BEVTransformer
+from models import OLSRegression, RANS
 
 class CannyLaneDetector():
 
     _VALID_SETUP = {
         "preprocessor": {
-            'in_range': {'lower_bounds': [0, 255], 'upper_bounds': [0, 255]},
-            'canny': {'weak_edge': [0, 301], 'sure_edge': [0, 301], 'blur_ksize': [3, 15], "blur_order": ["before", "after"]}
+            "generator": {
+                'in_range': {'lower_bounds': [0, 255], 'upper_bounds': [0, 255]},
+                'canny': {'weak_edge': [0, 301], 'sure_edge': [0, 301], 'blur_ksize': [3, 15], "blur_order": ["before", "after"]}
+            },
+            "extractor": {"filter_type": ["median", "mean"], "n_std": [0.1, 5.0], "weight": [0, 100]}
         },
-        'extractor': {"filter_type": ["median", "mean"], "n_std": [0.1, 5.0], "weight": [0, 100]},
         "estimator": {"degree": [1, 5], "factor":[0.0, 1.0], "n_iter": [1, 1000], 'min_inliers': [0.0, 1.0], "threshold": [0, 100]}
     }
 
     _DEFAULT_CONFIGS = {
-        "generator": {
-            'in_range': {'lower_bounds': 150, 'upper_bounds': 255},
-            'canny': {'weak_edge': 50, 'sure_edge': 100, 'blur_ksize': 3, "blur_order": "after"}
+        "preprocessor": {
+            "generator": {
+                'in_range': {'lower_bounds': 150, 'upper_bounds': 255},
+                'canny': {'weak_edge': 50, 'sure_edge': 100, 'blur_ksize': 3, "blur_order": "after"}
+            },
+            'extractor': {"filter_type": "median", "n_std": 2.0, "weight": 5}
         },
-        'extractor': {"filter_type": "median", "n_std": 2.0, "weight": 5},
         "estimator": {"degree": 2, "factor":0.6, "n_iter": None, "min_inliers": None, "threshold": None}
     }
 
     def __init__(self, source, roi:NDArray, configs:dict=None, stroke_color:tuple=(0, 0, 255), fill_color:tuple=(0, 255, 0)):
         if configs is None:
-            gen_configs, ext_configs, reg_configs = self._DEFAULT_CONFIGS['generator'], self._DEFAULT_CONFIGS["extractor"], self._DEFAULT_CONFIGS["estimator"]
+            pre_configs, est_configs = self._DEFAULT_CONFIGS['preprocessor'], self._DEFAULT_CONFIGS["estimator"]
         else:
-            gen_configs, ext_configs, reg_configs = self._get_configs(configs, self._DEFAULT_CONFIGS, self._VALID_SETUP)
-
-        self.mask = ROISelector(roi)
-        self.preprocessor = EdgeMapGenerator(self.mask.roi, gen_configs)
-        self.extractor = EdgePointExtractor(self.mask.x_mid, ext_configs)
-        self.estimator = OLSRegression(reg_configs)
+            pre_configs, est_configs = self._get_configs(configs, self._DEFAULT_CONFIGS, self._VALID_SETUP)
+        
         self.studio = StudioManager(source, stroke_color, fill_color)
+        self.mask = ROISelector(roi)
+        self.bev = BEVTransformer(self.mask.roi, (self.studio.source.height, self.studio.source.width), self.mask.x_max, self.mask.y_max)
+        self.preprocessor = CannyFeatureEngineer(self.mask.x_mid, pre_configs)
+        self.estimator = OLSRegression(est_configs)
         
     def detect(self, view_style: Literal[None, "inset", "mosaic", "composite"]="inset", stroke:bool=False, fill:bool=True, save:bool=False):        
         win_name = f"{self.studio.source.name} {view_style} View"
@@ -54,11 +58,13 @@ class CannyLaneDetector():
             if not ret:
                 self.studio.source.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
             else:
-                roi_mask, edge_map = self.preprocessor.gen_edge_map(frame)
-                pts = self.extractor.extract_points(edge_map)
-                fit = self.estimator.fit(pts)
-                frame_lst = [frame, roi_mask, edge_map]
-                final = self.studio.gen_view(frame_lst, frame_names, fit, view_style, stroke=stroke, fill=fill)
+                masked = self.mask.inverse_mask(frame)
+                warped = self.bev.transform(masked)
+                thresh, edge_map, kps = self.preprocessor.generate_features(warped)
+                warped_fit = self.estimator.fit(kps)
+                normal_fit = self.bev.inverse_transform(warped_fit)
+                frame_lst = [frame, thresh, edge_map]
+                final = self.studio.gen_view(frame_lst, frame_names, normal_fit, view_style, stroke=stroke, fill=fill)
 
                 cv2.imshow(win_name, final)
 
@@ -71,7 +77,7 @@ class CannyLaneDetector():
     def _get_configs(self, user_configs, default_configs, valid_config_setup):
         config_mngr = ConfigManager(user_configs, default_configs, valid_config_setup)
         final = config_mngr.manage()
-        return final["generator"], final["extractor"]
+        return final["preprocessor"], final["estimator"]
     
     def _get_frame_names(self, view_style):
         view_style_names = {

@@ -49,7 +49,7 @@ class OLSRegression:
 
             fit.append(line)
 
-        return fit
+        return np.array(fit, dtype=np.float32)
     
     def _gen_y_pred(self, direction, n_points, scale_params):
         coeffs = self.prev_coeffs.get(direction, None)
@@ -71,7 +71,7 @@ class OLSRegression:
 
         X, y = self._inverse_scaler(X_scaled, y_scaled, scale_params)
 
-        points = np.array([X, y], dtype=np.int32).T
+        points = np.array([X, y], dtype=np.float32).T
 
         # Smooth points if able
         prev_points = self.prev_points.get(direction, None)
@@ -81,7 +81,7 @@ class OLSRegression:
         # Assign points to persistent variable for next frame
         self.prev_points[direction] = points
 
-        return points.astype(np.int32)
+        return points.astype(np.float32)
     
     def _exp_moving_avg(self, prev, curr):
         if prev is None:

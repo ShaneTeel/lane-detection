@@ -1,20 +1,37 @@
+import cv2
 import numpy as np
 from scipy.signal import find_peaks
+
 
 class ROISelector():
 
     def __init__(self, roi:np.ndarray=None):
         self.roi = self._roi_validation(roi)
+        
         self.x_mid = None
+        self.x_max = None
+
         self.y_max = None
-        self.y_min = None
 
         self._roi_extraction()
 
     def _roi_extraction(self):
         self.x_mid = self.roi[:, :, 0].mean()
-        self.y_min = int(min(self.roi[0, 0, 1], self.roi[0, -1, 1]))
+        self.x_max = int(max(*self.roi[:, :, 0]))
+        
         self.y_max = int(max(self.roi[0, 0, 1], self.roi[0, -1, 1]))
+
+    def inverse_mask(self, frame):
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        mask = np.zeros_like(frame)
+        if len(frame.shape) > 2:
+            num_channels = frame.shape[2]
+            roi_color = (255,) * num_channels
+        else:
+            roi_color = 255
+        cv2.fillPoly(img=mask, pts=[self.roi], color=roi_color)
+        roi = cv2.bitwise_and(src1=frame, src2=mask)
+        return roi
 
     def _vanishing_point_roi(self):
 

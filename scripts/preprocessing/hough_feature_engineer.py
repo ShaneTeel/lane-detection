@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 
-class HoughPLineGenerator():
+class HoughFeatureEngineer():
 
     _DEFAULT_CONFIGS = {
         'hough': {'rho': 1, 'theta': 1, 'thresh': 50, 'min_length': 10, 'max_gap': 20},

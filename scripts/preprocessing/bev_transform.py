@@ -3,58 +3,59 @@ import numpy as np
 
 class BEVTransformer():
 
-    def __init__(self, roi):
-        self.src_pts = roi.astype(np.float32)
-        self.dst_pts = np.array([[[25, 100],
-                                  [515, 100],
-                                  [515, 900],
-                                  [25, 900]]],
-                                  dtype=np.float32)
-        
-    def _warp_frame(self, frame):
-        H = self._calc_matrix_H(self.src_pts, self.dst_pts)
-        frame = cv2.warpPerspective(frame, H, (frame.shape))
-        return frame
+    def __init__(self, roi, size:tuple, x_max, y_max):
     
-    def _calc_matrix_H(self, src_pts, dest_pts):
+        self.src_pts = roi.astype(np.float32)
+        self.h, self.w = size
 
-        A = []
-        print(src_pts)
-        for (xi, yi), (xj, yj) in zip(src_pts[0], dest_pts[0]):
-            A.append([-xi, -yi, -1, 0, 0, 0, xi * xj, yi * yj, xj])
-            A.append([0, 0, 0, -xi, -yi, -1, xi * yj, yi * yj, yj])
+        src_bottom_left, src_bottom_right, src_top_right, src_top_left = self.src_pts[0]
+        bottom_width = np.linalg.norm(src_bottom_right - src_bottom_left)
+        roi_height = np.linalg.norm(src_bottom_left - src_top_left)
+        dst_width = int(bottom_width)
+        dst_height = int(roi_height * 1.5)
 
-        A = np.array(A)
-        U, S, V_T = np.linalg.svd(A)
-        H = V_T[-1].reshape(3, 3)
+        bottom_left = [0, dst_height]
+        bottom_right = [dst_width, dst_height]
+        top_right = [dst_width, 0]
+        top_left = [0, 0]
+        
+        self.dst_pts = np.array([[bottom_left,
+                                  bottom_right,
+                                  top_right,
+                                  top_left]],
+                                  dtype=np.float32)
+        print(f"DEBUG (dst pts): {[bottom_left, bottom_right, top_right, top_left]}")
+        print(f"DEBUG (src pts): {[[100, 540], [900, 540], [515, 320], [450, 320]]}")
+        
+        self.H = self._calc_H_mat()
+        # self.H = cv2.getPerspectiveTransform(self.src_pts, self.dst_pts)
+        self.H_I = np.linalg.inv(self.H)
+        
+    def transform(self, frame):
+        return cv2.warpPerspective(frame, self.H, (self.w, self.h), flags=cv2.INTER_NEAREST)
+    
+    # def transform(self, pts):
+    #     return cv2.perspectiveTransform(pts, self.H)
+
+    def inverse_transform(self, pts):
+        pts = cv2.perspectiveTransform(pts, self.H_I)
+        return pts.astype(np.int32)
+    
+    def _calc_H_mat(self):
+
+        A = np.zeros((9, 9), dtype=np.float32)
+        A[8, 8] = 1
+
+        xi_yi = self.src_pts[0]
+        ui_vi = self.dst_pts[0]
+        DOF = list(range(0, 8, 2))
+
+        for dof, (xi, yi), (ui, vi) in zip(DOF, xi_yi, ui_vi):
+            A[dof,:] = np.array([-xi, -yi, -1, 0, 0, 0, xi * ui, yi * ui, ui])
+            A[dof+1,:] = np.array([0, 0, 0, -xi, -yi, -1, xi * vi, yi * vi, vi])
+
+        b = np.array([0]*8 + [1], dtype=np.float32)
+
+        H = np.linalg.solve(A, b).reshape(3, 3)
 
         return H / H[2, 2]
-
-    
-# if __name__=="__main__":
-
-#     src1 = "../../media/in/test_img1.jpg"
-#     src2 = "../../media/in/lane1-straight.mp4"
-#     frame = cv2.imread(src1)
-#     cap = cv2.VideoCapture(src2)
-
-#     ret, frame = cap.read()
-#     print(frame.shape)
-#     cv2.imshow("Original", frame)
-#     cv2.waitKey(0)
-
-#     roi = np.array([[[100, 540], 
-#                      [900, 540], 
-#                      [515, 320], 
-#                      [450, 320]]], dtype=np.int32)
-    
-
-#     bev = BEVTransformer(roi, 540, 900)
-
-#     warped = bev._warp_frame(frame)
-
-#     cv2.imshow("Warped", warped)
-#     cv2.waitKey(0)
-
-#     cv2.destroyAllWindows()
-

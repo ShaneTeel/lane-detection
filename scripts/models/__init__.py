@@ -1,1 +1,2 @@
 from .ols_regression import OLSRegression
+from .ransac_regression import RANSACRegression

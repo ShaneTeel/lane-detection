@@ -1,6 +1,6 @@
 import numpy as np
 
-class RANSACManager():
+class RANSACRegression():
     '''Test'''
     
     _VALID_CONFIG_SETUP = {

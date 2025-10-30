@@ -1,7 +1,7 @@
 import numpy as np
 from typing import Literal
 
-class EdgePointExtractor:
+class CannyFeatureExtractor:
 
     _DEFAULT_CONFIGS = {
         'extractor': {"filter_type": "median", "n_std": 2.0, "weight": 5}
@@ -48,7 +48,6 @@ class EdgePointExtractor:
         return resampled
 
     def _point_filtering(self, lane, filter_type:Literal["median", "mean"]="median", n_std:float=2.0):
-        print(lane)
         X = lane[:, 0]
 
         X_center = np.median(X) if filter_type == "median" else np.mean(X)
