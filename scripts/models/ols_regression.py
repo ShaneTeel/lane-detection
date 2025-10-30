@@ -1,11 +1,22 @@
 import numpy as np
-from .evaluation import RegressionJudge
+from .metrics import RegressionJudge
 
 class OLSRegression:
     '''Test'''
+    _DEFAULT_CONFIGS = {
+        "estimator": {"degree": 2, "factor":0.6, "n_iter": None, "min_inliers": None, "threshold": None}
+    }
     
-    def __init__(self):
+    def __init__(self, configs:dict=None):
+        if configs is None:
+            configs = self._DEFAULT_CONFIGS['estimator']
 
+        self.degree = configs['degree']
+        self.curr_weight = configs['factor']
+        self.prev_weight = 1 - self.curr_weight
+        self.n_iter = configs['n_iter']
+        self.min_inliers = configs['min_inliers']
+        self.threshold = configs['threshold']
         self.prev_points = {"left": None, "right": None}
         self.prev_coeffs = {"left": None, "right": None}
         self.judge = RegressionJudge()
@@ -24,24 +35,34 @@ class OLSRegression:
                 continue
             X = lane[:, 0]
             y = lane[:, 1]
+            n_points = len(y)
 
             X_scaled, y_scaled, params = self._gen_inputs(X, y)
 
             coeffs = self._calc_coeffs(X_scaled, y_scaled)
 
-            line = self._gen_line(coeffs, direction, scale_params=params)
+            line = self._gen_line(coeffs, direction, params)
+
+            y_pred = self._gen_y_pred(direction, n_points, params)
             
-            self.judge.evaluate(y, line[:, 1], direction)
+            self.judge.evaluate(y, y_pred, direction)
 
             fit.append(line)
 
-        return np.array(fit) if len(fit) > 0 else None
+        return fit
+    
+    def _gen_y_pred(self, direction, n_points, scale_params):
+        coeffs = self.prev_coeffs.get(direction, None)
 
+        X_scaled = np.linspace(0, 1, n_points)
+        y_scaled = self._poly_val(coeffs, X_scaled)
+
+        return self._inverse_scaler(X_scaled, y_scaled, scale_params)[1]
+    
     def _gen_line(self, coeffs, direction, scale_params):
         prev_coeffs = self.prev_coeffs.get(direction, None)
 
-        if prev_coeffs is not None:
-            coeffs = (0.6 * coeffs + (1 - 0.6) * prev_coeffs)
+        coeffs = self._exp_moving_avg(prev_coeffs, coeffs)
 
         self.prev_coeffs[direction] = coeffs
 
@@ -49,70 +70,61 @@ class OLSRegression:
         y_scaled = self._poly_val(coeffs, X_scaled)
 
         X, y = self._inverse_scaler(X_scaled, y_scaled, scale_params)
+
         points = np.array([X, y], dtype=np.int32).T
 
         # Smooth points if able
         prev_points = self.prev_points.get(direction, None)
 
-        if prev_points is not None:
-            points = (0.6 * points + (1 - 0.6) * prev_points).astype(np.int32)
-        
+        points = self._exp_moving_avg(prev_points, points)
+    
         # Assign points to persistent variable for next frame
         self.prev_points[direction] = points
 
-        return points
-        
+        return points.astype(np.int32)
+    
+    def _exp_moving_avg(self, prev, curr):
+        if prev is None:
+            return curr
+        return (self.curr_weight * curr + self.prev_weight * prev)
+
     def _calc_coeffs(self, X, y):
         '''(X.T * X)**-1 * (X.T & y)'''
         if X is None or y is None:
             raise ValueError(f"Error: 'X' ({X}) or 'y' ({y}) == 'NoneType'")
         else:
-            X_t = X.T
-            X_t_X = np.dot(X_t, X)
-            X_t_X_inv = np.linalg.inv(X_t_X)
-
-            X_t_y = np.dot(X_t, y)            
-            return np.dot(X_t_X_inv, X_t_y)
+            XT = X.T
+            A = (XT @ X)
+            b = XT @ y
+            return np.linalg.solve(A, b)
         
     def _poly_val(self, coeffs, X):
-        if len(coeffs) == 2:
-            b0, b1 = coeffs
-            return b1 * X + b0
-        elif len(coeffs) == 3:
-            b0, b1, b2 = coeffs
-            return b0 + b1 * X + b2 * X**2
-        else:
-            raise ValueError(f"ERROR: Coeffs ({coeffs}) length not 2 or 3.")
+        b0 = coeffs[0]
+        return b0 + sum([X**(i+1) * b for i, b in enumerate(coeffs[1:])])
 
     def _gen_inputs(self, X, y):
 
         X, y, params = self._min_max_scaler(X, y)
         
-        y_range = y.max() - y.min()
-
-        top_third = y[y < (y.min() + y_range / 3)]
-
-        if len(top_third) < 10:
-            degree = 1
-        else:
-            degree = 2
-        
         X_vars = [np.ones_like(X)]
         
-        for i in range(1, degree + 1):
+        for i in range(1, self.degree + 1):
             X_vars.append(X**i)
         X = np.column_stack(X_vars)
 
         return X, y, params
 
-
-    def _min_max_scaler(self, X, y):
+    def _min_max_scaler(self, X, y, thresh:int=None):
         if X is None or y is None:
             raise ValueError(f"Error: 'X' ({X}) or 'y' ({y}) == 'NoneType'")
-
+        
         targets = [X, y]
+
+        if thresh is not None:
+            targets.append(thresh)
+
         params = []
-        for i in range(len(targets)):
+        for i in range(2):
             val = targets[i]
             min, max = val.min(), val.max()
             params.append(min), params.append(max)
@@ -122,8 +134,6 @@ class OLSRegression:
     
     def _inverse_scaler(self, X_scaled, y_scaled, scale_params):
         X_min, X_max, y_min, y_max = scale_params
-
         X = X_scaled * (X_max - X_min) + X_min
         y = y_scaled * (y_max - y_min) + y_min
         return X, y
-        

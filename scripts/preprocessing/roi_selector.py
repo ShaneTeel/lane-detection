@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.signal import find_peaks
 
-class ROIManager():
+class ROISelector():
 
     def __init__(self, roi:np.ndarray=None):
         self.roi = self._roi_validation(roi)

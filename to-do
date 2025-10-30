@@ -1,10 +1,36 @@
 Tasks:
 	2. ROI Calculator
-	5. Hyperparameter Tuning
-	6. Batch Processing
-	7. Clean-up RANSAC lines (they are innacurate with a great amount of variance)
-        7a. Generate lines that reach the min/max of the selected/calculated ROI
-	8. Clean up ConfigManager and configuration management as a whole. 
-	9. Auto-calc best resize for both mosaic and inset view
+		- Vanishing Point
+		- Edge-Density
 
-	10. If get to curved line with houghlinesP, fix the lane edge to the inside of the edge detected, NOT the outside. 
+	5. Hyperparameter Tuning
+		- Best params for both preprocessing and regression
+
+	6. Batch Processing
+		- Separate class that handles batch processing (e.g., making multiple instances of CannyLaneDetector() and iterating through them to perform lane detection)
+
+	9. Auto-calc best resize for both mosaic and inset view
+		- Instead of fixed param for cv2.resize, identify method for dynamic calculation based on users window size
+
+	10. Finish RegressionJudge()
+		- Convert instances from dict of running sum to a list for each metric calculated for each lane
+		- Add a __str__() function for the class so that when is printed the avg metrics are printed with the best, worst, and random sample frame metrics are printed 
+
+	11. Identify classification mechanism for lane lines drawn
+		- What do the lines do?
+		- How are they indicators of actions a driver should take?
+		- What is the capacity of the lines to drive action or inform understanding?
+
+	12. Homography preprocessing step
+		- Add inverse perspective mapping to CannyEdgeGenerator()
+		- Identify necessary preprocessing steps to perform homography
+		- Identify best place to insert homography
+		- Identify how to reverse the impacts of it for final lane line generation
+			- Does the illustrator draw the line on the inverse mapped image and then revert image to original perspective?
+			OR
+			- Does the illustrator draw lines generated from inverse mapped to original image? I suspect this would result in wonky lines.
+
+	13. Generalize ols_regression.py to handle both RANSAC and OLS
+		- Add appropriate params for new regressor to account for both RANSAC and OLS
+		- Add params at initialization, not during detection.
+		

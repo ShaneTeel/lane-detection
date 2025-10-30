@@ -8,8 +8,7 @@ class RANSACManager():
         'polyfit': {'n_iter': [0, 100], 'degree': [1, 2, 3], 'threshold': [0, 100], 'min_inliers': [0.0, 1.0], 'weight': [1, 10], "factor": [0.0, 1.0]},
     }
     _DEFAULT_CONFIG = {
-        'filter': {'filter_type': 'median', 'n_std': 2}, 
-        'polyfit': {'n_iter': 100, 'degree': 2, 'threshold': 50, 'min_inliers': 0.6, 'weight': 5, 'factor': 0.1}
+        'regression': {'n_iter': 100, 'degree': 2, 'threshold': None, 'min_inliers': None, 'weight': 5, 'factor': 0.1}
     }
 
     def __init__(self, roi, configs:dict = None):
@@ -106,7 +105,7 @@ class RANSACManager():
             inliers = errors < threshold
             inlier_count = np.sum(inliers)
 
-            # Best coeffs check5)
+            # Best coeffs check
             if inlier_count > best_inlier_count:
                 best_inlier_count = inlier_count
                 best_inliers = inliers

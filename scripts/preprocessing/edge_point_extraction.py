@@ -6,7 +6,7 @@ class EdgePointExtractor:
     _DEFAULT_CONFIGS = {
         'extractor': {"filter_type": "median", "n_std": 2.0, "weight": 5}
     }
-    def __init__(self, x_mid, configs):
+    def __init__(self, x_mid, configs:dict = None):
         if configs is None:
             configs = self._DEFAULT_CONFIGS["extractor"]
 
@@ -48,6 +48,7 @@ class EdgePointExtractor:
         return resampled
 
     def _point_filtering(self, lane, filter_type:Literal["median", "mean"]="median", n_std:float=2.0):
+        print(lane)
         X = lane[:, 0]
 
         X_center = np.median(X) if filter_type == "median" else np.mean(X)

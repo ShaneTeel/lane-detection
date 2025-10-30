@@ -1,18 +1,19 @@
 import cv2
-import numpy as np
 from typing import Literal
+from numpy.typing import NDArray
 from studio import StudioManager
-from preprocessing import ConfigManager, ROIManager, EdgeMapGenerator, EdgePointExtractor
+from preprocessing import ConfigManager, ROISelector, EdgeMapGenerator, EdgePointExtractor
 from models import OLSRegression
 
-class OLSLaneDetector():
+class CannyLaneDetector():
 
     _VALID_SETUP = {
         "preprocessor": {
             'in_range': {'lower_bounds': [0, 255], 'upper_bounds': [0, 255]},
             'canny': {'weak_edge': [0, 301], 'sure_edge': [0, 301], 'blur_ksize': [3, 15], "blur_order": ["before", "after"]}
         },
-        'extractor': {"filter_type": ["median", "mean"], "n_std": [0.1, 5.0], "weight": [0, 100]}
+        'extractor': {"filter_type": ["median", "mean"], "n_std": [0.1, 5.0], "weight": [0, 100]},
+        "estimator": {"degree": [1, 5], "factor":[0.0, 1.0], "n_iter": [1, 1000], 'min_inliers': [0.0, 1.0], "threshold": [0, 100]}
     }
 
     _DEFAULT_CONFIGS = {
@@ -20,22 +21,23 @@ class OLSLaneDetector():
             'in_range': {'lower_bounds': 150, 'upper_bounds': 255},
             'canny': {'weak_edge': 50, 'sure_edge': 100, 'blur_ksize': 3, "blur_order": "after"}
         },
-        'extractor': {"filter_type": "median", "n_std": 2.0, "weight": 5}
+        'extractor': {"filter_type": "median", "n_std": 2.0, "weight": 5},
+        "estimator": {"degree": 2, "factor":0.6, "n_iter": None, "min_inliers": None, "threshold": None}
     }
 
-    def __init__(self, source, roi:np.ndarray, configs:dict=None, stroke_color:tuple=(0, 0, 255), fill_color:tuple=(0, 255, 0)):
+    def __init__(self, source, roi:NDArray, configs:dict=None, stroke_color:tuple=(0, 0, 255), fill_color:tuple=(0, 255, 0)):
         if configs is None:
-            gen_configs, ext_configs = self._DEFAULT_CONFIGS['generator'], self._DEFAULT_CONFIGS["extractor"]
+            gen_configs, ext_configs, reg_configs = self._DEFAULT_CONFIGS['generator'], self._DEFAULT_CONFIGS["extractor"], self._DEFAULT_CONFIGS["estimator"]
         else:
-            gen_configs, ext_configs = self._get_configs(configs, self._DEFAULT_CONFIGS, self._VALID_SETUP)
+            gen_configs, ext_configs, reg_configs = self._get_configs(configs, self._DEFAULT_CONFIGS, self._VALID_SETUP)
 
-        self.mask = ROIManager(roi)
+        self.mask = ROISelector(roi)
         self.preprocessor = EdgeMapGenerator(self.mask.roi, gen_configs)
         self.extractor = EdgePointExtractor(self.mask.x_mid, ext_configs)
-        self.estimator = OLSRegression()
+        self.estimator = OLSRegression(reg_configs)
         self.studio = StudioManager(source, stroke_color, fill_color)
         
-    def detect(self, view_style: Literal[None, "inset", "mosaic", "composite"]="inset", stroke:bool=False, fill:bool=True, save:bool = False):        
+    def detect(self, view_style: Literal[None, "inset", "mosaic", "composite"]="inset", stroke:bool=False, fill:bool=True, save:bool=False):        
         win_name = f"{self.studio.source.name} {view_style} View"
         cv2.namedWindow(win_name)
         
@@ -84,6 +86,7 @@ class OLSLaneDetector():
             raise KeyError(f"ERROR: Invalid argument passed to 'view_style'. Must be one of {[key for key in view_style_names.keys()]}")
     
 if __name__=="__main__":
+    import numpy as np
 
     src = "../media/in/lane1-straight.mp4"
     # src = "../media/in/test_img1.jpg"
@@ -93,6 +96,6 @@ if __name__=="__main__":
                      [515, 320], 
                      [450, 320]]], dtype=np.int32)
 
-    hough = OLSLaneDetector(src, roi)
+    hough = CannyLaneDetector(src, roi)
 
-    hough.detect("composite", stroke=True, fill=True)
+    hough.detect("mosaic", stroke=True, fill=True)
