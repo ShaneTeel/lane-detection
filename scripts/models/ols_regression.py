@@ -51,13 +51,27 @@ class OLSRegression:
 
         return np.array(fit, dtype=np.float32)
     
-    def _gen_y_pred(self, direction, n_points, scale_params):
-        coeffs = self.prev_coeffs.get(direction, None)
+    def _gen_inputs(self, X, y):
 
-        X_scaled = np.linspace(0, 1, n_points)
-        y_scaled = self._poly_val(coeffs, X_scaled)
+        X, y, params = self._min_max_scaler(X, y)
+        
+        X_vars = [np.ones_like(X)]
+        
+        for i in range(1, self.degree + 1):
+            X_vars.append(X**i)
+        X = np.column_stack(X_vars)
 
-        return self._inverse_scaler(X_scaled, y_scaled, scale_params)[1]
+        return X, y, params
+    
+    def _calc_coeffs(self, X, y):
+        '''(X.T * X)**-1 * (X.T & y)'''
+        if X is None or y is None:
+            raise ValueError(f"Error: 'X' ({X}) or 'y' ({y}) == 'NoneType'")
+        else:
+            XT = X.T
+            A = (XT @ X)
+            b = XT @ y
+            return np.linalg.solve(A, b)
     
     def _gen_line(self, coeffs, direction, scale_params):
         prev_coeffs = self.prev_coeffs.get(direction, None)
@@ -82,37 +96,23 @@ class OLSRegression:
         self.prev_points[direction] = points
 
         return points.astype(np.float32)
-    
-    def _exp_moving_avg(self, prev, curr):
-        if prev is None:
-            return curr
-        return (self.curr_weight * curr + self.prev_weight * prev)
 
-    def _calc_coeffs(self, X, y):
-        '''(X.T * X)**-1 * (X.T & y)'''
-        if X is None or y is None:
-            raise ValueError(f"Error: 'X' ({X}) or 'y' ({y}) == 'NoneType'")
-        else:
-            XT = X.T
-            A = (XT @ X)
-            b = XT @ y
-            return np.linalg.solve(A, b)
+    def _gen_y_pred(self, direction, n_points, scale_params):
+        coeffs = self.prev_coeffs.get(direction, None)
+
+        X_scaled = np.linspace(0, 1, n_points)
+        y_scaled = self._poly_val(coeffs, X_scaled)
+
+        return self._inverse_scaler(X_scaled, y_scaled, scale_params)[1]
         
     def _poly_val(self, coeffs, X):
         b0 = coeffs[0]
         return b0 + sum([X**(i+1) * b for i, b in enumerate(coeffs[1:])])
 
-    def _gen_inputs(self, X, y):
-
-        X, y, params = self._min_max_scaler(X, y)
-        
-        X_vars = [np.ones_like(X)]
-        
-        for i in range(1, self.degree + 1):
-            X_vars.append(X**i)
-        X = np.column_stack(X_vars)
-
-        return X, y, params
+    def _exp_moving_avg(self, prev, curr):
+        if prev is None:
+            return curr
+        return (self.curr_weight * curr + self.prev_weight * prev)
 
     def _min_max_scaler(self, X, y, thresh:int=None):
         if X is None or y is None:
@@ -129,8 +129,7 @@ class OLSRegression:
             min, max = val.min(), val.max()
             params.append(min), params.append(max)
             targets[i] = (val - min) / (max - min) if max > min else val
-
-        return targets[0], targets[1], params
+        return targets[0], targets[1], params[:4]
     
     def _inverse_scaler(self, X_scaled, y_scaled, scale_params):
         X_min, X_max, y_min, y_max = scale_params

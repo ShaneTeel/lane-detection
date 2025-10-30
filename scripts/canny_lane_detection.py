@@ -3,7 +3,7 @@ from typing import Literal
 from numpy.typing import NDArray
 from studio import StudioManager
 from preprocessing import ConfigManager, ROISelector, CannyFeatureEngineer, BEVTransformer
-from models import OLSRegression, RANS
+from models import OLSRegression, RANSACRegression
 
 class CannyLaneDetector():
 
@@ -15,7 +15,7 @@ class CannyLaneDetector():
             },
             "extractor": {"filter_type": ["median", "mean"], "n_std": [0.1, 5.0], "weight": [0, 100]}
         },
-        "estimator": {"degree": [1, 5], "factor":[0.0, 1.0], "n_iter": [1, 1000], 'min_inliers': [0.0, 1.0], "threshold": [0, 100]}
+        "estimator": {"method": ["RANSAC", "OLS"], "degree": [1, 5], "factor":[0.0, 1.0], "n_iter": [1, 1000], 'min_inliers': [0.0, 1.0], "threshold": [0, 100]}
     }
 
     _DEFAULT_CONFIGS = {
@@ -26,7 +26,7 @@ class CannyLaneDetector():
             },
             'extractor': {"filter_type": "median", "n_std": 2.0, "weight": 5}
         },
-        "estimator": {"degree": 2, "factor":0.6, "n_iter": None, "min_inliers": None, "threshold": None}
+        "estimator": {"method": "RANSAC", "degree": 2, "factor":0.6, "n_iter": 50, "min_inliers": 0.6, "threshold": 60}
     }
 
     def __init__(self, source, roi:NDArray, configs:dict=None, stroke_color:tuple=(0, 0, 255), fill_color:tuple=(0, 255, 0)):
@@ -39,7 +39,7 @@ class CannyLaneDetector():
         self.mask = ROISelector(roi)
         self.bev = BEVTransformer(self.mask.roi, (self.studio.source.height, self.studio.source.width), self.mask.x_max, self.mask.y_max)
         self.preprocessor = CannyFeatureEngineer(self.mask.x_mid, pre_configs)
-        self.estimator = OLSRegression(est_configs)
+        self.estimator = RANSACRegression(est_configs)
         
     def detect(self, view_style: Literal[None, "inset", "mosaic", "composite"]="inset", stroke:bool=False, fill:bool=True, save:bool=False):        
         win_name = f"{self.studio.source.name} {view_style} View"

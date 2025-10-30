@@ -24,11 +24,8 @@ class BEVTransformer():
                                   top_right,
                                   top_left]],
                                   dtype=np.float32)
-        print(f"DEBUG (dst pts): {[bottom_left, bottom_right, top_right, top_left]}")
-        print(f"DEBUG (src pts): {[[100, 540], [900, 540], [515, 320], [450, 320]]}")
         
         self.H = self._calc_H_mat()
-        # self.H = cv2.getPerspectiveTransform(self.src_pts, self.dst_pts)
         self.H_I = np.linalg.inv(self.H)
         
     def transform(self, frame):
