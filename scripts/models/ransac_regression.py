@@ -5,7 +5,7 @@ class RANSACRegression():
     '''Test'''
 
     _DEFAULT_CONFIG = {
-        "estimator": {"method": "OLS", "degree": 2, "factor":0.6, "n_iter": None, "min_inliers": None, "threshold": None}
+        "estimator": {"method": "OLS", "degree": 2, "factor":0.6, "min_inliers": None, "max_error": None}
     }
 
     def __init__(self, configs:dict = None):
@@ -19,7 +19,7 @@ class RANSACRegression():
         self.prev_weight = 1.0 - self.curr_weight
         self.n_iter = configs["n_iter"]
         self.min_inliers = configs["min_inliers"]
-        self.threshold = configs["threshold"]
+        self.max_error = configs["max_error"]
         self.prev_points = {"left": None, "right": None}
         self.prev_coeffs = {"left": None, "right": None}
         self.judge = RegressionJudge()
@@ -37,10 +37,10 @@ class RANSACRegression():
                 continue
 
             # Generate inputs for polyfit
-            X, y, threshold, params = self._get_inputs(lane)
+            X, y, max_error, params = self._get_inputs(lane)
 
             # Get best coeffs
-            best_coeffs = self._get_best_fit(X, y, threshold)
+            best_coeffs = self._get_best_fit(X, y, max_error)
 
             points = self._gen_line(best_coeffs, direction, params)
             
@@ -52,17 +52,17 @@ class RANSACRegression():
         X = lane[:, 0]
         y = lane[:, 1]
 
-        X, y, thresh, params = self._min_max_scaler(X, y)
+        X, y, max_error, params = self._min_max_scaler(X, y)
         
-        X_vars = [np.ones_like(X)]
+        X_mat = [np.ones_like(X)]
         
         for i in range(1, self.degree + 1):
-            X_vars.append(X**i)
-        X = np.column_stack(X_vars)
+            X_mat.append(X**i)
+        X = np.column_stack(X_mat)
 
-        return X, y, thresh, params
+        return X, y, max_error, params
 
-    def _get_best_fit(self, X, y, threshhold):
+    def _get_best_fit(self, X, y, max_error):
 
         if self.method == "OLS":
             return self._calc_coeffs(X, y)
@@ -71,20 +71,19 @@ class RANSACRegression():
         best_inliers = None
         best_inlier_count = 0
         best_coeffs = None
-        n_points = len(X)
-        sample_size = min(max(self.degree+3, 5), n_points)
+        population = len(X)
+        consensus = population * self.min_inliers
+        sample_size = min(max(self.degree+3, 5), population)
         
         for _ in range(self.n_iter):
-
             # Random sampling
-            sample_idx = np.random.choice(n_points, size=sample_size, replace=False)
+            sample_idx = np.random.choice(population, size=sample_size, replace=False)
             sample_X = X[sample_idx]
             sample_y = y[sample_idx]
 
             # Fit polynomial to samples
             try:
                 coeffs = self._calc_coeffs(sample_X, sample_y)
-
 
                 if not isinstance(coeffs, np.ndarray) or len(coeffs) != self.poly_size:
                     continue
@@ -93,11 +92,12 @@ class RANSACRegression():
                 continue
 
             # Evaluate sample fit on all points
-            y_pred = self._poly_val(coeffs, X)
-            errors = np.abs(sum(y - y_pred) ** 2)
+            X_lin = np.linspace(0, 1, population)
+            y_pred = self._poly_val(coeffs, X_lin)
+            sample_errors = np.abs(sum(y - y_pred) ** 2)
 
             # Count inliers (points close to fit)
-            inliers = errors < threshhold
+            inliers = sample_errors < max_error
             inlier_count = np.sum(inliers)
 
             # Best coeffs check
@@ -106,25 +106,28 @@ class RANSACRegression():
                 best_inliers = inliers
                 best_coeffs = coeffs
 
+            # Fit Option 1: Calc coeffs of best inliers if consensus met
+            if best_inliers is not None and best_inlier_count >= consensus:
+                inlier_X = X[best_inliers]
+                inlier_y = y[best_inliers]
+                if len(inlier_X) >= self.poly_size:
+                    try:
+                        ransac_coeffs = self._calc_coeffs(inlier_X, inlier_y)
+                        if isinstance(ransac_coeffs, np.ndarray) and len(ransac_coeffs) == self.poly_size:
+                            print("CONSENSUS: Re-Fitting best_inliers.")
+                            return ransac_coeffs
+                    except (np.linalg.LinAlgError, TypeError, ValueError):
+                        pass
+                    else:
+                        print("CONSENSUS: Returning best_inliers w/ out refit.")
+                        return best_coeffs # Return best coeffs without refit        
+
+        print(f"NO CONSENSUS! Inlier count never reached {self.min_inliers:.2f}% of total population; fitting all X, y (OLS)")
         # Leading Coefficient check: If leading coefficient is a negative value, fit all data
         if self.degree == 2 and best_coeffs is not None:
             if best_coeffs[0] < 0:
                 print(f"WARNING: Suspecious parabola a = {best_coeffs[0]}")
                 return self._calc_coeffs(X, y)
-
-        # Best coeffs vs normal polyfit check
-        if best_inliers is not None and best_inlier_count >= self.min_inliers * n_points:
-            inlier_X = X[best_inliers]
-            inlier_y = y[best_inliers]
-            if len(inlier_X) >= self.poly_size:
-                try:
-                    ransac_coeffs = self._calc_coeffs(inlier_X, inlier_y)
-                    if isinstance(ransac_coeffs, np.ndarray) and len(ransac_coeffs) == self.poly_size:
-                        return ransac_coeffs
-                except (np.linalg.LinAlgError, TypeError, ValueError):
-                    pass
-                else:
-                    return best_coeffs # Return best coeffs without refit
 
         # FAIL SAFE: Fit all data
         try:
@@ -135,14 +138,11 @@ class RANSACRegression():
             pass
 
     def _gen_line(self, coeffs, direction, scale_params):
-
-        prev_coeffs = self.prev_coeffs.get(direction, None)
         
         # Smooth coeffs, if able
+        prev_coeffs = self.prev_coeffs.get(direction, None)
         coeffs = self._exp_moving_avg(prev_coeffs, coeffs)
-
-        # Assign coeffs to persistent variable for next frame
-        self.prev_coeffs[direction] = coeffs
+        self.prev_coeffs[direction] = coeffs # assign coeffs to instance to persist across runs
 
         # Generate 100 points in scaled space
         X_scaled = np.linspace(0, 1, 100)
@@ -156,13 +156,10 @@ class RANSACRegression():
         # Convert X, y to a numpy array
         points = np.array([X, y], dtype=np.float32).T
 
-        prev_points = self.prev_points.get(direction, None)
-
         # Smooth points, if able
+        prev_points = self.prev_points.get(direction, None)
         points = self._exp_moving_avg(prev_points, points)
-    
-        # Assign points to persistent variable for next frame
-        self.prev_points[direction] = points
+        self.prev_points[direction] = points # assign points to instance to persist across runs
 
         return points.astype(np.float32)
 
@@ -189,7 +186,7 @@ class RANSACRegression():
         if X is None or y is None:
             raise ValueError(f"Error: 'X' ({X}) or 'y' ({y}) == 'NoneType'")
         
-        targets = [X, y, self.threshold]
+        targets = [X, y, self.max_error]
 
         params = []
         for i in range(2):

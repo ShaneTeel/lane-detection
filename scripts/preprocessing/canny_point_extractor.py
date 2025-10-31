@@ -1,25 +1,25 @@
 import numpy as np
 from typing import Literal
 
-class CannyFeatureExtractor:
+class CannyFeatureExtractor():
 
     _DEFAULT_CONFIGS = {
         'extractor': {"filter_type": "median", "n_std": 2.0, "weight": 5}
     }
-    def __init__(self, x_mid, configs:dict = None):
+    def __init__(self, x_mid, configs:dict=None):
         if configs is None:
             configs = self._DEFAULT_CONFIGS["extractor"]
-
+           
         self.x_mid = x_mid
         self.filter_type = configs["filter_type"]
         self.n_std = configs["n_std"]
         self.weight = configs["weight"]
 
-    def extract_points(self, edge_map):
+    def extract(self, edge_map):
         pts = self._point_extraction(edge_map)
         classified = self._point_splitting(pts, self.x_mid)
         return self._point_resampling(classified, self.filter_type, self.n_std, self.weight)
-
+    
     def _point_extraction(self, edge_map):
         edge_pts = np.where(edge_map != 0)
         if edge_pts is None:
@@ -43,8 +43,7 @@ class CannyFeatureExtractor:
             if lane is not None:
                 lane = self._point_filtering(lane, filter_type, n_std)
                 lane = self._point_replication(lane, weight)
-                resampled.append(lane)
-
+                resampled.append(lane.astype(np.float32))
         return resampled
 
     def _point_filtering(self, lane, filter_type:Literal["median", "mean"]="median", n_std:float=2.0):

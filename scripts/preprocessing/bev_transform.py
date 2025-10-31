@@ -30,9 +30,6 @@ class BEVTransformer():
         
     def transform(self, frame):
         return cv2.warpPerspective(frame, self.H, (self.w, self.h), flags=cv2.INTER_NEAREST)
-    
-    # def transform(self, pts):
-    #     return cv2.perspectiveTransform(pts, self.H)
 
     def inverse_transform(self, pts):
         pts = cv2.perspectiveTransform(pts, self.H_I)
