@@ -42,7 +42,7 @@ class CannyFeatureExtractor():
         for lane in lanes:
             if lane is not None:
                 lane = self._point_filtering(lane, filter_type, n_std)
-                lane = self._point_replication(lane, weight)
+                # lane = self._point_replication(lane, weight)
                 resampled.append(lane.astype(np.float32))
         return resampled
 
@@ -55,11 +55,11 @@ class CannyFeatureExtractor():
         return lane[X_mask]
 
 
-    def _point_replication(self, lane, weight:int=5):
-        X = lane[:, 0]
-        y = lane[:, 1]
-        y_min_idx, y_max_idx = np.argmin(y), np.argmax(y)
-        X = np.concatenate([X] + [X[[y_min_idx, y_max_idx]]] * weight)
-        y = np.concatenate([y] + [y[[y_min_idx, y_max_idx]]] * weight)
+    # def _point_replication(self, lane, weight:int=5):
+    #     X = lane[:, 0]
+    #     y = lane[:, 1]
+    #     y_min_idx, y_max_idx = np.argmin(y), np.argmax(y)
+    #     X = np.concatenate([X] + [X[[y_min_idx, y_max_idx]]] * weight)
+    #     y = np.concatenate([y] + [y[[y_min_idx, y_max_idx]]] * weight)
     
-        return np.column_stack([X, y])
+    #     return np.column_stack([X, y])

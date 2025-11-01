@@ -18,8 +18,8 @@ class FeatureEngineer():
         else:
             gen_configs, ext_configs = configs["generator"], configs["extractor"]
 
-            self.generate = CannyEdgeGenerator(gen_configs)
-            self.extract = CannyFeatureExtractor(x_mid, ext_configs)
+        self.generate = CannyEdgeGenerator(gen_configs)
+        self.extract = CannyFeatureExtractor(x_mid, ext_configs)
 
     def generate_features(self, frame):
         thresh, edge_map = self.generate.generate(frame)

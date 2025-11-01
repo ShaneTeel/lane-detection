@@ -5,7 +5,7 @@ class RANSACRegression():
     '''Test'''
 
     _DEFAULT_CONFIG = {
-        "estimator": {"degree": 2, "factor":0.6, "min_inliers": 0.3, "max_error": 20}
+        "estimator": {"degree": 2, "factor":0.6, "min_inliers": None, "max_error": None}
     }
 
     def __init__(self, configs:dict = None):
@@ -66,7 +66,6 @@ class RANSACRegression():
         best_inlier_count = 0
         best_coeffs = None
         population = len(X)
-
         # Determine consensus count. Support fraction (0<min_inliers<1) or absolute count (>=1).        
         if self.min_inliers is None:
             consensus = int(np.ceil(population * 0.5))
@@ -103,10 +102,9 @@ class RANSACRegression():
             except (np.linalg.LinAlgError, TypeError, ValueError):
                 continue
 
-            # Evaluate sample fit on all points (original scaled X in column 1)
+            # Evaluate sample fit on all points (use original scaled x in column 1)
             y_pred = self._poly_val(coeffs, X[:, 1])
-
-            # Use absolute error
+            # Use absolute error (consistent with typical RANSAC thresholds)
             sample_errors = np.abs(y - y_pred)
 
             # Count inliers (points close to fit)
@@ -114,7 +112,7 @@ class RANSACRegression():
             if max_error is None:
                 threshold = 1e-6
             else:
-                threshold = np.abs(max_error)
+                threshold = float(max_error)
 
             inlier_mask = sample_errors <= threshold
             inlier_count = np.sum(inlier_mask)
@@ -127,36 +125,27 @@ class RANSACRegression():
             
             if inlier_count == population:
                 break
-        try:
-            frac = (best_inlier_count / population) * 100 if population > 0 else 0.0
-        except Exception:
-            frac = 0.0
 
         # Fit Option 1: Calc coeffs of best inliers if consensus met
-        print("DEBUG")
-        print(f"\tMax Error Threshold: {threshold}")
-        print(f"\tAvg Errors: {np.mean(sample_errors)}")
-        print(f"\tBest Inlier Count: {best_inlier_count}")
-        print(f"\tRequired Consensus: {consensus}")
-        print(f"\tPopulation: {population}")
-        print(f"\tFraction: {frac}")
-
         if best_inliers is not None and best_inlier_count >= consensus:
             inlier_X = X[best_inliers]
             inlier_y = y[best_inliers]
-
             if len(inlier_X) >= self.poly_size:
                 try:
                     ransac_coeffs = self._calc_coeffs(inlier_X, inlier_y)
                     if isinstance(ransac_coeffs, np.ndarray) and len(ransac_coeffs) == self.poly_size:
-                        print(f"CONSENSUS reached! Best inlier's account for {frac}% of total population; Fitting best inliers.")
+                        print(f"CONSENSUS: Re-Fitting best_inliers. {best_inlier_count / population:.2f}")
                         return ransac_coeffs
                 except (np.linalg.LinAlgError, TypeError, ValueError):
                     pass
                 else:
                     return best_coeffs # Return best coeffs without refit        
         if best_inliers is None or best_inlier_count < consensus:
-            print(f"NO CONSENSUS! Best inlier's account for {frac}% of total population, but args required {self.min_inliers * 100}%. Falling back to full-data OLS.")
+            try:
+                frac = (best_inlier_count / population) if population > 0 else 0.0
+            except Exception:
+                frac = 0.0
+            print(f"NO CONSENSUS! Best inlier fraction: {frac:.2f}; required: {self.min_inliers}. Falling back to full-data OLS.")
         # Leading Coefficient check: If leading coefficient is a negative value, fit all data
         if self.degree == 2 and best_coeffs is not None:
             if best_coeffs[-1] < 0:
@@ -224,12 +213,12 @@ class RANSACRegression():
         params = []
         for i in range(2):
             val = targets[i]
-            v_min, v_max = val.min(), val.max()
-            params.append(v_min), params.append(v_max)
-            targets[i] = (val - v_min) / (v_max - v_min) if v_max > v_min else val
+            min, max = val.min(), val.max()
+            params.append(min), params.append(max)
+            targets[i] = (val - min) / (max - min) if max > min else val
             if i == 1:
                 val = targets[2]
-                targets[2] = val / (v_max - v_min) if v_max > v_min else val
+                targets[2] = (val - min) / (max - min) if max > min else val
         return targets[0], targets[1], targets[2], params[:4]
     
     def _inverse_scaler(self, X_scaled, y_scaled, scale_params):

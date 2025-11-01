@@ -1,4 +1,5 @@
 import cv2
+import numpy as np
 from typing import Literal
 from numpy.typing import NDArray
 from studio import StudioManager
@@ -15,7 +16,7 @@ class CannyLaneDetector():
             },
             "extractor": {"filter_type": ["median", "mean"], "n_std": [0.1, 5.0], "weight": [0, 100]}
         },
-        "estimator": {"method": ["RANSAC", "OLS"], "degree": [1, 5], "factor":[0.0, 1.0], 'min_inliers': [0.0, 1.0], "max_error": [0, 100]}
+        "estimator": {"degree": [1, 5], "factor":[0.0, 1.0], 'min_inliers': [0.0, 1.0], "max_error": [0, 100]}
     }
 
     _DEFAULT_CONFIGS = {
@@ -26,7 +27,7 @@ class CannyLaneDetector():
             },
             'extractor': {"filter_type": "median", "n_std": 2.0, "weight": 5}
         },
-        "estimator": {"method": "RANSAC", "degree": 2, "factor":0.6, "n_iter": 100, "min_inliers": 0.3, "max_error": 10}
+        "estimator": {"degree": 2, "factor":0.6, "n_iter": 50, "min_inliers": 0.8, "max_error": 10}
     }
 
     def __init__(self, source, roi:NDArray, configs:dict=None, stroke_color:tuple=(0, 0, 255), fill_color:tuple=(0, 255, 0)):
@@ -57,14 +58,15 @@ class CannyLaneDetector():
             ret, frame = self.studio.return_frame()
             if not ret:
                 self.studio.source.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                continue
             else:
                 masked = self.mask.inverse_mask(frame)
-                warped = self.bev.transform(masked)
-                thresh, edge_map, kps = self.preprocessor.generate_features(warped)
-                warped_fit = np.array(self.estimator.fit(kps))
-                normal_fit = self.bev.inverse_transform(warped_fit)
-                frame_lst = [frame, thresh, edge_map]
-                final = self.studio.gen_view(frame_lst, frame_names, normal_fit, view_style, stroke=stroke, fill=fill)
+                # warped = self.bev.transform(masked)
+                thresh, edge_map, kps = self.preprocessor.generate_features(masked)
+                fit = self.estimator.fit(kps)
+                # fit = self.bev.inverse_transform(np.array(fit))
+                frame_lst = [frame, masked, edge_map]
+                final = self.studio.gen_view(frame_lst, frame_names, fit, view_style, stroke=stroke, fill=fill)
 
                 cv2.imshow(win_name, final)
 
@@ -97,11 +99,11 @@ if __name__=="__main__":
     src = "../media/in/lane1-straight.mp4"
     # src = "../media/in/test_img1.jpg"
 
-    roi = np.array([[[100, 540], 
-                     [900, 540], 
-                     [515, 320], 
+    roi = np.array([[[75, 540], 
+                     [925, 540], 
+                     [520, 320], 
                      [450, 320]]], dtype=np.int32)
 
     hough = CannyLaneDetector(src, roi)
 
-    hough.detect("composite", stroke=True, fill=True)
+    hough.detect("mosaic", stroke=True, fill=True)
