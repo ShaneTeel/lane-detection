@@ -21,16 +21,12 @@ Tasks:
 		- How are they indicators of actions a driver should take?
 		- What is the capacity of the lines to drive action or inform understanding?
 
-	12. Homography preprocessing step
-		- Add inverse perspective mapping to CannyEdgeGenerator()
-		- Identify necessary preprocessing steps to perform homography
-		- Identify best place to insert homography
-		- Identify how to reverse the impacts of it for final lane line generation
-			- Does the illustrator draw the line on the inverse mapped image and then revert image to original perspective?
-			OR
-			- Does the illustrator draw lines generated from inverse mapped to original image? I suspect this would result in wonky lines.
+	12. BEV Transform / Inverse
+		- Identify more robust mechanism for calculation dest. pts. Current approach is very finicky and user-input dependent.
+		- Identify best place for BEV Transform to occur (e.g., before thresholding, after feature extraction, etc.)
 
-	13. Generalize ols_regression.py to handle both RANSAC and OLS
-		- Add appropriate params for new regressor to account for both RANSAC and OLS
-		- Add params at initialization, not during detection.
-		
+	14. Benchmark / Profiling
+		- Identify potential bottlenecks and evaluate runtime
+		- Compare runtime between models, methods (i.e., Canny w/ BEV, Canny w/ out BEV, Hough w/ BEV, Hough w/ out BEV, and all with RANSAC, OLS, Sliding RANSAC, etc.)
+
+			

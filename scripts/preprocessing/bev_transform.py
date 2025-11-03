@@ -14,8 +14,8 @@ class BEVTransformer():
         dst_width = int(bottom_width)
         dst_height = int(roi_height * 1.5)
 
-        bottom_left = [0, dst_height]
-        bottom_right = [dst_width, dst_height]
+        bottom_left = [0, 540]
+        bottom_right = [dst_width, 540]
         top_right = [dst_width, 0]
         top_left = [0, 0]
         
@@ -24,7 +24,6 @@ class BEVTransformer():
                                   top_right,
                                   top_left]],
                                   dtype=np.float32)
-        
         self.H = self._calc_H_mat()
         self.H_I = np.linalg.inv(self.H)
         

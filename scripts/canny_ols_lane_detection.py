@@ -1,11 +1,12 @@
 import cv2
 import numpy as np
 from typing import Literal
-from utils import StudioManager, ConfigManager
-from preprocessing import EdgeDetector, ROIManager
-from line_generators import RANSACLineGenerator
+from numpy.typing import NDArray
+from studio import StudioManager
+from preprocessing import ConfigManager, ROISelector, FeatureEngineer, BEVTransformer
+from models import OLSRegression
 
-class RANSACLaneDetector():
+class CannyOLSDetector():
 
     _VALID_RANSAC_SETUP = {
         "preprocessor": {
@@ -24,7 +25,7 @@ class RANSACLaneDetector():
             'canny': {'weak_edge': 50, 'sure_edge': 100, 'blur_ksize': 3, "blur_order": "before"},
         },
         "generator": {
-            'filter': {'filter_type': 'median', 'n_std': 2}, 
+            'filter': {'filter_type': 'median', 'n_std': 1}, 
             'polyfit': {'n_iter': 100, 'degree': 2, 'threshold': 50, 'min_inliers': 0.6, 'weight': 5, 'factor': 0.1}
         }
     }

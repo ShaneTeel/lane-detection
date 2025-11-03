@@ -93,14 +93,16 @@ class RANSACRegression():
             sample_X = X[sample_idx]
             sample_y = y[sample_idx]
 
+
+
             # Fit polynomial to samples
             try:
                 coeffs = self._calc_coeffs(sample_X, sample_y)
-
                 if not isinstance(coeffs, np.ndarray) or len(coeffs) != self.poly_size:
                     continue
 
-            except (np.linalg.LinAlgError, TypeError, ValueError):
+            except (np.linalg.LinAlgError, TypeError, ValueError) as e:
+                print(f"WARNING: polyfit error - {e}")
                 continue
 
             # Evaluate sample fit on all points (original scaled X in column 1)
@@ -132,15 +134,6 @@ class RANSACRegression():
         except Exception:
             frac = 0.0
 
-        # Fit Option 1: Calc coeffs of best inliers if consensus met
-        print("DEBUG")
-        print(f"\tMax Error Threshold: {threshold}")
-        print(f"\tAvg Errors: {np.mean(sample_errors)}")
-        print(f"\tBest Inlier Count: {best_inlier_count}")
-        print(f"\tRequired Consensus: {consensus}")
-        print(f"\tPopulation: {population}")
-        print(f"\tFraction: {frac}")
-
         if best_inliers is not None and best_inlier_count >= consensus:
             inlier_X = X[best_inliers]
             inlier_y = y[best_inliers]
@@ -149,7 +142,6 @@ class RANSACRegression():
                 try:
                     ransac_coeffs = self._calc_coeffs(inlier_X, inlier_y)
                     if isinstance(ransac_coeffs, np.ndarray) and len(ransac_coeffs) == self.poly_size:
-                        print(f"CONSENSUS reached! Best inlier's account for {frac}% of total population; Fitting best inliers.")
                         return ransac_coeffs
                 except (np.linalg.LinAlgError, TypeError, ValueError):
                     pass
