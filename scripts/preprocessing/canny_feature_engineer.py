@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 from typing import Literal
+from .config_manager import ConfigManager
 
 class CannyFeatureEngineer():
 
@@ -114,3 +115,8 @@ class CannyFeatureExtractor():
         X_std = np.std(X)
         X_mask = np.abs(X - X_center) < (n_std * X_std)
         return lane[X_mask]
+        
+    def _get_configs(self, user_configs, default_configs, valid_config_setup):
+        config_mngr = ConfigManager(user_configs, default_configs, valid_config_setup)
+        final = config_mngr.manage()
+        return final

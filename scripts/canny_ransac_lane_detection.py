@@ -65,7 +65,7 @@ class CannyRANSACDetector():
                 thresh, edge_map, kps = self.generator.generate_features(masked)
                 fit = self.estimator.fit(kps)
                 # fit = self.bev.inverse_transform(np.array(fit, dtype=np.float32))
-                frame_lst = [frame, masked, edge_map]
+                frame_lst = [frame, thresh, edge_map]
                 final = self.studio.gen_view(frame_lst, frame_names, fit, view_style, stroke=stroke, fill=fill)
 
                 cv2.imshow(win_name, final)

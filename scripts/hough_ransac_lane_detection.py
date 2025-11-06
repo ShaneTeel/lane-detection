@@ -102,8 +102,8 @@ class HoughRANSACDetector():
 if __name__=="__main__":
     import numpy as np
 
-    # src = "../media/in/lane1-straight.mp4"
-    src = "../media/in/test_img1.jpg"
+    src = "../media/in/lane1-straight.mp4"
+    # src = "../media/in/test_img1.jpg"
 
     roi = np.array([[[75, 540], 
                      [925, 540], 
@@ -112,4 +112,4 @@ if __name__=="__main__":
 
     hough = HoughRANSACDetector(src, roi)
 
-    hough.detect("mosaic", stroke=True, fill=True)
+    hough.detect("mosaic", stroke=False, fill=True)
