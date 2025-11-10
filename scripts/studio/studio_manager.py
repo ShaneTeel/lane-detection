@@ -41,3 +41,15 @@ class StudioManager():
             return True, frame
         else:
             return False, None
+        
+    def _get_frame_names(self, view_style):
+        view_style_names = {
+            "inset": ["Original", "Threshold", "Edge Map"],
+            "mosaic": ["Original", "Threshold", "Edge Map", "Composite"],
+            "composite": ["Composite"]
+        }
+        try:
+            names = view_style_names[view_style]
+            return names
+        except Exception as e:
+            raise KeyError(f"ERROR: Invalid argument passed to 'view_style'. Must be one of {[key for key in view_style_names.keys()]}")

@@ -1,10 +1,23 @@
 Tasks:
+
+	1. Models
+		- Splines / B-Splines
+		- Bezier Curves
+		- Clothoid
+		- Sliding Window
+		- Kalman Filter
+	
 	2. ROI Calculator
 		- Vanishing Point
 		- Edge-Density
 
+	3. Preprocessors
+		- Canny - Rough Draft (Need to add error defeat)
+		- Hough - Rough Draft (Need to add error defeat)
+
 	5. Hyperparameter Tuning
 		- Best params for both preprocessing and regression
+		- GridSearchCV-like function
 
 	6. Batch Processing
 		- Separate class that handles batch processing (e.g., making multiple instances of CannyLaneDetector() and iterating through them to perform lane detection)

@@ -1,6 +1,6 @@
 import numpy as np
 
-class RegressionJudge():
+class RegressionEvaluator():
 
     def __init__(self):
 

@@ -1,9 +1,21 @@
 import cv2
 import numpy as np
 from .canny_feature_engineer import CannyEdgeGenerator
+from .config_manager import ConfigManager
 
 
 class HoughFeatureEngineer():
+
+    _VALID_SETUP = {
+        "generator": {
+            'in_range': {'lower_bounds': [0, 255], 'upper_bounds': [0, 255]},
+            'canny': {'weak_edge': [0, 301], 'sure_edge': [0, 301], 'blur_ksize': [3, 15], "blur_order": ["before", "after"]}
+            },
+        "extractor": {
+            "hough": {'rho': [1, 1000], 'theta': [1, 180], 'thresh': [1, 500], 'min_length': [1, 1000], 'max_gap': [1, 1000]},
+            "filter": {"filter_type": ["median", "mean"], "n_std": [0.1, 5.0], "weight": [0, 100]}
+        }
+    }
 
     _DEFAULT_CONFIGS = {
         "generator": {
@@ -11,54 +23,53 @@ class HoughFeatureEngineer():
             'canny': {'weak_edge': 50, 'sure_edge': 100, 'blur_ksize': 3, "blur_order": "after"}
         },
         "extractor": {
-            'hough': {'rho': 1, 'theta': 1, 'thresh': 50, 'min_length': 10, 'max_gap': 20},
+            'hough': {'rho': 1, 'theta': 1, 'thresh': 50, 'min_length': 15, 'max_gap': 10},
             "filter": {"filter_type": "median", "n_std": 2.0, "weight": 5}
         }
     }
 
-    def __init__(self, x_mid, configs):
+    def __init__(self, configs:dict = None):
         if configs is None:
-            gen_configs, ext_configs = self._DEFAULT_CONFIGS["generator"], self._DEFAULT_CONFIGS["extractor"]
-        
+            gen_configs, ext_configs = self._DEFAULT_CONFIGS['generator'], self._DEFAULT_CONFIGS["extractor"]
         else:
-            gen_configs, ext_configs = configs["generator"], configs["extractor"]
+            final = get_configs(configs, self._DEFAULT_CONFIGS, self._VALID_SETUP)
+            gen_configs, ext_configs = final["generator"], final["extractor"]
 
         self.generator = CannyEdgeGenerator(gen_configs)
-        self.extractor = HoughLineGenerator(x_mid, ext_configs)
+        self.extractor = HoughLineGenerator(ext_configs)
     
-    def generate_features(self, frame):
+    def generate_features(self, frame, x_mid):
         thresh, edge_map = self.generator.generate(frame)
-        kps = self.extractor.extract(edge_map)
-        return thresh, edge_map, kps        
+        kps = self.extractor.extract(edge_map, x_mid)
+        return thresh, edge_map, kps   
 
 class HoughLineGenerator():
+    
+    _VALID_SETUP = {
+        "hough": {'rho': [1, 1000], 'theta': [1, 180], 'thresh': [1, 500], 'min_length': [1, 1000], 'max_gap': [1, 1000]}
+    }
 
     _DEFAULT_CONFIGS = {
-        'hough': {'rho': 1, 'theta': 1, 'thresh': 50, 'min_length': 10, 'max_gap': 20},
-        'filter': {"filter_type": "median", "n_std": 2.0, "weight": 5}
-        }
+        "hough": {'rho': 1, 'theta': 1, 'thresh': 50, 'min_length': 15, 'max_gap': 10}
+    }
 
-    def __init__(self, x_mid, configs):
+    def __init__(self, configs:dict=None):
         if configs is None:
-            hough, filter = self._DEFAULT_CONFIGS["hough"], self._DEFAULT_CONFIGS["filter"]
+            hough = self._DEFAULT_CONFIGS["hough"]
         else:
-            hough, filter = configs["hough"], configs["filter"]
+            hough = get_configs(configs, self._DEFAULT_CONFIGS, self._VALID_SETUP)["hough"]
 
-        self.x_mid = x_mid
         self.rho = hough['rho']
         self.theta = np.radians(hough["theta"])
         self.thresh = hough['thresh']
         self.min_length = hough['min_length']
         self.max_gap = hough['max_gap']
-        self.filter_type = filter['filter_type']
-        self.n_std = filter['n_std']
 
-    def extract(self, edge_map):
+    def extract(self, edge_map, x_mid):
         lines = self._point_extraction(edge_map, self.rho, self.theta, self.thresh, self.min_length, self.max_gap)
         if lines is None:
             return None
-        # filtered = self._center_filter(lines, self.filter_type, self.n_std)
-        lanes = self._point_splitting(lines, self.x_mid)
+        lanes = self._point_splitting(lines, x_mid)
         return lanes
 
     def _point_extraction(self, edge_map, rho, theta, thresh, min_length, max_gap):
@@ -79,16 +90,8 @@ class HoughLineGenerator():
                 right.append([X1, y1])
                 right.append([X2, y2])
         return [np.array(left), np.array(right)]
-
-    # def _center_filter(self, lanes, filter_type:str =['median', 'mean'], n_std:float=2.0):
-    #     # Lane X-Val Filter
-        
-    #     if lanes is not None:
-    #         X1 = lanes[:, :, 0]
-    #         X2 = lanes[:, :, 2]
-    #         X = np.concatenate([X1, X2], axis=1)
-    #         X_center = np.median(X) if filter_type == "median" else np.mean(X)
-    #         X_std = np.std(X)
-
-    #         mask = np.abs(X - X_center) < (n_std * X_std)
-    #     return lanes[mask[:, 0]]
+    
+def get_configs(user_configs, default_configs, valid_config_setup):
+    config_mngr = ConfigManager(user_configs, default_configs, valid_config_setup)
+    final = config_mngr.manage()
+    return final

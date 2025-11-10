@@ -5,30 +5,44 @@ from .config_manager import ConfigManager
 
 class CannyFeatureEngineer():
 
-    _DEFAULT_CONFIGS = {
-            "generator": {
-                'in_range': {'lower_bounds': 150, 'upper_bounds': 255},
-                'canny': {'weak_edge': 50, 'sure_edge': 100, 'blur_ksize': 3, "blur_order": "after"},
+    _VALID_SETUP = {
+        "generator": {
+            'in_range': {'lower_bounds': [0, 255], 'upper_bounds': [0, 255]},
+            'canny': {'weak_edge': [0, 301], 'sure_edge': [0, 301], 'blur_ksize': [3, 15], "blur_order": ["before", "after"]}
             },
-            'extractor': {"filter_type": "median", "n_std": 2.0, "weight": 5}
+        "extractor": {"filter_type": ["median", "mean"], "n_std": [0.1, 5.0], "weight": [0, 100]}
+    }
+
+    _DEFAULT_CONFIGS = {
+        "generator": {
+            'in_range': {'lower_bounds': 150, 'upper_bounds': 255},
+            'canny': {'weak_edge': 50, 'sure_edge': 100, 'blur_ksize': 3, "blur_order": "after"},
+            },
+        'extractor': {"filter_type": "median", "n_std": 2.0, "weight": 5}
         }
     
-    def __init__(self, x_mid, configs:dict=None):
+    def __init__(self, configs:dict=None):
         if configs is None:
             gen_configs, ext_configs = self._DEFAULT_CONFIGS["generator"], self._DEFAULT_CONFIGS["extractor"]
         
         else:
-            gen_configs, ext_configs = configs["generator"], configs["extractor"]
+            final = get_configs(configs, self._DEFAULT_CONFIGS, self._VALID_SETUP)
+            gen_configs, ext_configs = final["generator"], final["extractor"]
 
         self.generate = CannyEdgeGenerator(gen_configs)
-        self.extract = CannyFeatureExtractor(x_mid, ext_configs)
+        self.extract = CannyFeatureExtractor(ext_configs)
 
-    def generate_features(self, frame):
+    def generate_features(self, frame, x_mid):
         thresh, edge_map = self.generate.generate(frame)
-        kps = self.extract.extract(edge_map)
+        kps = self.extract.extract(edge_map, x_mid)
         return thresh, edge_map, kps
     
 class CannyEdgeGenerator():
+    _VALID_SETUP = {
+        'in_range': {'lower_bounds': [0, 255], 'upper_bounds': [0, 255]},
+        'canny': {'weak_edge': [0, 301], 'sure_edge': [0, 301], 'blur_ksize': [3, 15], "blur_order": ["before", "after"]}
+    }
+        
     _DEFAULT_CONFIGS = {
         'in_range': {'lower_bounds': 150, 'upper_bounds': 255},
         'canny': {'weak_edge': 50, 'sure_edge': 100, 'blur_ksize': 3, "blur_order": "after"}
@@ -38,6 +52,9 @@ class CannyEdgeGenerator():
 
         if configs is None:
             configs = self._DEFAULT_CONFIGS
+        else:
+            configs = get_configs(configs, self._DEFAULT_CONFIGS, self._VALID_SETUP)
+
         self.lower_bounds = configs["in_range"].get("lower_bounds")
         self.upper_bounds = configs["in_range"].get("upper_bounds")
         self.weak_edge = configs["canny"].get("weak_edge")
@@ -51,8 +68,7 @@ class CannyEdgeGenerator():
         return thresh, edge_map
     
     def _threshold(self, frame, lower_bounds, upper_bounds):
-        thresh = cv2.inRange(frame, lower_bounds, upper_bounds)
-        return thresh
+        return cv2.inRange(frame, lower_bounds, upper_bounds)
 
     def _detect_edges(self, roi, weak_edge, sure_edge, blur_ksize, blur_order):
         kernel = (blur_ksize, blur_ksize)
@@ -65,22 +81,24 @@ class CannyEdgeGenerator():
         return img
     
 class CannyFeatureExtractor():
+    _VALID_SETUP = {"filter_type": ["median", "mean"], "n_std": [0.1, 5.0], "weight": [0, 100]}
 
-    _DEFAULT_CONFIGS = {
-        'extractor': {"filter_type": "median", "n_std": 2.0, "weight": 5}
-    }
-    def __init__(self, x_mid, configs:dict=None):
+    _DEFAULT_CONFIGS = {"filter_type": "median", "n_std": 2.0, "weight": 5}
+
+    def __init__(self, configs:dict=None):
         if configs is None:
-            configs = self._DEFAULT_CONFIGS["extractor"]
+            configs = self._DEFAULT_CONFIGS
+        else:
+            configs = get_configs(configs, self._DEFAULT_CONFIGS, self._VALID_SETUP)
+        
            
-        self.x_mid = x_mid
         self.filter_type = configs["filter_type"]
         self.n_std = configs["n_std"]
         self.weight = configs["weight"]
 
-    def extract(self, edge_map):
+    def extract(self, edge_map, x_mid):
         pts = self._point_extraction(edge_map)
-        classified = self._point_splitting(pts, self.x_mid)
+        classified = self._point_splitting(pts, x_mid)
         return self._point_resampling(classified, self.filter_type, self.n_std, self.weight)
     
     def _point_extraction(self, edge_map):
@@ -115,8 +133,8 @@ class CannyFeatureExtractor():
         X_std = np.std(X)
         X_mask = np.abs(X - X_center) < (n_std * X_std)
         return lane[X_mask]
-        
-    def _get_configs(self, user_configs, default_configs, valid_config_setup):
-        config_mngr = ConfigManager(user_configs, default_configs, valid_config_setup)
-        final = config_mngr.manage()
-        return final
+    
+def get_configs(user_configs, default_configs, valid_config_setup):
+    config_mngr = ConfigManager(user_configs, default_configs, valid_config_setup)
+    final = config_mngr.manage()
+    return final
