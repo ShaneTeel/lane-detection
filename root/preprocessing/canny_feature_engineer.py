@@ -32,7 +32,7 @@ class CannyFeatureEngineer():
         self.generate = CannyEdgeGenerator(gen_configs)
         self.extract = CannyFeatureExtractor(ext_configs)
 
-    def generate_features(self, frame, x_mid):
+    def preprocess(self, frame, x_mid):
         thresh, edge_map = self.generate.generate(frame)
         kps = self.extract.extract(edge_map, x_mid)
         return thresh, edge_map, kps

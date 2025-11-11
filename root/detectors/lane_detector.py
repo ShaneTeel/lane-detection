@@ -1,15 +1,15 @@
 import cv2
 import numpy as np
 from typing import Literal
-from studio import StudioManager
-from utils import Evaluator, ROISelector
+from lane_detection.studio import StudioManager
+from lane_detection.utils import Evaluator, ROISelector
 
-class BaseLaneDetector():
+class LaneDetector():
 
     def __init__(self, source, preprocessor, estimator, roi:np.ndarray, factor:float=0.6, stroke_color:tuple=(0, 0, 255), fill_color:tuple=(0, 255, 0)):        
         self.studio = StudioManager(source, stroke_color, fill_color)
         self.mask = ROISelector(roi)
-        self.generator = preprocessor
+        self.preprocessor = preprocessor
         self.estimator = estimator
         self.curr_weight = factor
         self.prev_weight = 1.0 - self.curr_weight
@@ -34,7 +34,7 @@ class BaseLaneDetector():
                 continue
             else:
                 masked = self.mask.inverse_mask(frame)
-                thresh, edge_map, kps = self.generator.generate_features(masked, self.mask.x_mid)
+                thresh, edge_map, kps = self.preprocessor.preprocess(masked, self.mask.x_mid)
                 lane_lines = []
                 for i, lane in enumerate(kps):
 
@@ -56,15 +56,9 @@ class BaseLaneDetector():
                     
                     # Inverse scale, and create points
                     X, y = self._inverse_scaler(X_lin, y_pred, params)
-                    curr_points = np.array([X, y]).T
+                    points = np.array([X, y], dtype=np.int32).T
 
-                    # Smooth points, if able
-                    prev_points = self.prev_points.get(direction, None)
-                    points = self._weighted_avg(prev_points, curr_points)
-
-                    # Update attribute to persist across runs
-                    self.prev_points[direction] = points
-                    lane_lines.append(points.astype(np.int32))
+                    lane_lines.append(points)
 
                 frame_lst = [frame, thresh, edge_map]
                 final = self.studio.gen_view(frame_lst, frame_names, lane_lines, view_style, stroke=stroke, fill=fill)
@@ -76,14 +70,6 @@ class BaseLaneDetector():
 
                 if self.studio.playback.playback_controls():
                     break
-
-    def _weighted_avg(self, prev, curr):
-        if prev is None:
-            return curr
-        if curr is None:
-            return prev
-        
-        return (self.curr_weight * curr + self.prev_weight * prev)
 
     def _min_max_scaler(self, X, y, max_error:float=None):
         if X is None or y is None:
@@ -112,8 +98,8 @@ if __name__=="__main__":
     from models import RANSACRegression
     from preprocessing import HoughFeatureEngineer
 
-    src = "../media/in/lane1-straight.mp4"
-    # src = "../media/in/test_img1.jpg"
+    src = "../../media/in/lane1-straight.mp4"
+    # src = "../../media/in/test_img1.jpg"
 
     roi = np.array([[[75, 540], 
                      [925, 540], 
@@ -123,6 +109,6 @@ if __name__=="__main__":
     estimator = RANSACRegression()
     preprocessor = HoughFeatureEngineer()
 
-    hough = BaseLaneDetector(src, preprocessor, estimator, roi)
+    hough = LaneDetector(src, preprocessor, estimator, roi)
 
     hough.detect("mosaic", stroke=True, fill=True)

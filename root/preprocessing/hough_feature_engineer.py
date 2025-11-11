@@ -38,7 +38,7 @@ class HoughFeatureEngineer():
         self.generator = CannyEdgeGenerator(gen_configs)
         self.extractor = HoughLineGenerator(ext_configs)
     
-    def generate_features(self, frame, x_mid):
+    def preprocess(self, frame, x_mid):
         thresh, edge_map = self.generator.generate(frame)
         kps = self.extractor.extract(edge_map, x_mid)
         return thresh, edge_map, kps   
