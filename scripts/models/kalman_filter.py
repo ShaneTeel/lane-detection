@@ -70,75 +70,78 @@ class KalmanFilter():
         else:
             return np.diag([20.0, 20.0, 10.0])
 
-coeffs = np.array([3, 4, 6]).reshape(-1, 1)
 
-test = KalmanFilter(30, coeffs, "highway")
-# Variable set-up
-# Current state
-x = np.array([[150.0], [2.3], [-0.05], [0.0], [0.0], [0.0]]) # Coeffs + velocities
+if __name__=="__main__":
+        
+    coeffs = np.array([3, 4, 6]).reshape(-1, 1)
 
-# Covariance Matrix (Uncertainty)
-P = np.eye(6) * 10.0 # Multiply by 10 to add uncertainty
+    test = KalmanFilter(30, coeffs, "highway")
+    # Variable set-up
+    # Current state
+    x = np.array([[150.0], [2.3], [-0.05], [0.0], [0.0], [0.0]]) # Coeffs + velocities
 
-# Distance (FPS)
-dt = 1/30 # Frames per Second (FPS)
-I3 = np.eye(3, dtype=float)
-dt_I3 = dt * I3
-zeros = np.zeros_like(I3, dtype=float)
-F = np.block([
-    [I3, dt_I3],
-    [zeros, I3]
-])
+    # Covariance Matrix (Uncertainty)
+    P = np.eye(6) * 10.0 # Multiply by 10 to add uncertainty
 
-# Process noise (model uncertainty)
-Q = np.diag([0.1, 0.1, 0.1, 0.5, 0.5, 0.5])
+    # Distance (FPS)
+    dt = 1/30 # Frames per Second (FPS)
+    I3 = np.eye(3, dtype=float)
+    dt_I3 = dt * I3
+    zeros = np.zeros_like(I3, dtype=float)
+    F = np.block([
+        [I3, dt_I3],
+        [zeros, I3]
+    ])
 
-# Measurement matrix
-H = np.block([
-    [I3, zeros]
-])
+    # Process noise (model uncertainty)
+    Q = np.diag([0.1, 0.1, 0.1, 0.5, 0.5, 0.5])
 
-# Process Frames
-# Step 1: Current State Prediction
-x_pred = F @ x
-print("\nStep 1: Current State Prediction (x_pred)")
-print(x_pred)
+    # Measurement matrix
+    H = np.block([
+        [I3, zeros]
+    ])
 
-# Step 2: Covariance Prediction
-P_pred = F @ P @ F.T + Q
-print("\nStep 2: Covariance Prediction (P_pred)")
-print(P_pred)
+    # Process Frames
+    # Step 1: Current State Prediction
+    x_pred = F @ x
+    print("\nStep 1: Current State Prediction (x_pred)")
+    print(x_pred)
 
-# Step 3: Get Measurements (coeffs)
-z = np.array([[152.0], [2.4], [-0.05]])
-print("\nStep 3: Get measurements (coeffs)")
-print(z)
+    # Step 2: Covariance Prediction
+    P_pred = F @ P @ F.T + Q
+    print("\nStep 2: Covariance Prediction (P_pred)")
+    print(P_pred)
 
-# Get measurements noise
-R = np.diag([5.0, 5.0, 2.0])
+    # Step 3: Get Measurements (coeffs)
+    z = np.array([[152.0], [2.4], [-0.05]])
+    print("\nStep 3: Get measurements (coeffs)")
+    print(z)
 
-# Step 4: Innovation
-innovation = z - H @ x_pred
-print("\nStep 4: Innovation")
-print(innovation)
+    # Get measurements noise
+    R = np.diag([5.0, 5.0, 2.0])
 
-# Step 5: Innovation Covariance
-S = H @ P_pred @ H.T + R
-print("\nStep 5: Innovation Covariance (S)")
-print(S)
+    # Step 4: Innovation
+    innovation = z - H @ x_pred
+    print("\nStep 4: Innovation")
+    print(innovation)
 
-# Step 6: Kalman Gain
-K = P_pred @ H.T @ np.linalg.inv(S)
-print("\nStep 6: Kamlan Gain (K)")
-print(K)
+    # Step 5: Innovation Covariance
+    S = H @ P_pred @ H.T + R
+    print("\nStep 5: Innovation Covariance (S)")
+    print(S)
 
-# Step 7: Current State Update
-x_updated = x_pred + K @ innovation
-print("\nStep 7: Updated State (x)")
-print(x_updated)
+    # Step 6: Kalman Gain
+    K = P_pred @ H.T @ np.linalg.inv(S)
+    print("\nStep 6: Kamlan Gain (K)")
+    print(K)
 
-# Step 8: Covariance Update
-I = np.eye(6)
-P_updated = (I - K @ H) @ P_pred
-print("\nStep 8: Updated P Diagnol")
-print(np.diag(P_updated))
+    # Step 7: Current State Update
+    x_updated = x_pred + K @ innovation
+    print("\nStep 7: Updated State (x)")
+    print(x_updated)
+
+    # Step 8: Covariance Update
+    I = np.eye(6)
+    P_updated = (I - K @ H) @ P_pred
+    print("\nStep 8: Updated P Diagnol")
+    print(np.diag(P_updated))

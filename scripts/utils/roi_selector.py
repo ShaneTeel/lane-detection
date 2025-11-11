@@ -103,26 +103,3 @@ class ROISelector():
             img = cv2.Canny(thresh, weak_edge, sure_edge)
             img = cv2.GaussianBlur(img, kernel, 0)
         return img
-    
-
-
-if __name__ == "__main__":
-    import cv2
-
-    frame = cv2.imread('media/in/test_img1.jpg')
-    hist = cv2.calcHist([frame], [0], None, [256], [0, 256])
-
-    test = ROISegmentor()
-
-    roi = test._edge_density_roi(frame)
-
-    mask = np.zeros_like(frame)
-
-    cv2.fillPoly(img=mask, pts=[roi], color=(0, 255, 0))
-
-    frame = cv2.addWeighted(frame, 0.8, mask, 0.15, 0.0)
-    
-    cv2.imshow("Test", frame)
-    cv2.waitKey(0)
-
-    cv2.destroyAllWindows()

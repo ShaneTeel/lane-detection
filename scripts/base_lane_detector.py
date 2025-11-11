@@ -2,32 +2,19 @@ import cv2
 import numpy as np
 from typing import Literal
 from studio import StudioManager
-from preprocessing import BEVTransformer
-from utils import RegressionEvaluator, ROISelector
+from utils import Evaluator, ROISelector
 
 class BaseLaneDetector():
 
-    _VALID_SETUP = {
-        "preprocessor": {
-            "generator": {
-                'in_range': {'lower_bounds': [0, 255], 'upper_bounds': [0, 255]},
-                'canny': {'weak_edge': [0, 301], 'sure_edge': [0, 301], 'blur_ksize': [3, 15], "blur_order": ["before", "after"]}
-            },
-            "extractor": {"filter_type": ["median", "mean"], "n_std": [0.1, 5.0], "weight": [0, 100]}
-        },
-        "estimator": {"degree": [1, 5], "factor":[0.0, 1.0], 'min_inliers': [0.0, 1.0], "max_error": [0, 100]}
-    }
-
-    def __init__(self, source, preprocessor, estimator, roi:np.ndarray, factor:float=0.6, configs:dict=None, stroke_color:tuple=(0, 0, 255), fill_color:tuple=(0, 255, 0)):        
+    def __init__(self, source, preprocessor, estimator, roi:np.ndarray, factor:float=0.6, stroke_color:tuple=(0, 0, 255), fill_color:tuple=(0, 255, 0)):        
         self.studio = StudioManager(source, stroke_color, fill_color)
         self.mask = ROISelector(roi)
-        self.bev = BEVTransformer(self.mask.roi, (self.studio.source.height, self.studio.source.width), self.mask.x_max, self.mask.y_max)
         self.generator = preprocessor
         self.estimator = estimator
         self.curr_weight = factor
         self.prev_weight = 1.0 - self.curr_weight
         self.prev_points = {"left": None, "right": None}
-        self.metrics = RegressionEvaluator()
+        self.metrics = Evaluator()
 
     def detect(self, view_style: Literal[None, "inset", "mosaic", "composite"]="inset", stroke:bool=False, fill:bool=True, save:bool=False):        
         win_name = f"{self.studio.source.name} {view_style.capitalize()} View"
@@ -53,14 +40,15 @@ class BaseLaneDetector():
 
                     # Direction variable
                     direction = "left" if i == 0 else "right"
-                    if len(lane) < self.estimator.poly_size:
+                    if len(lane) < self.estimator.ols.poly_size:
                         print(f"WARNING: {direction} lane does not have enough points to perform fit. Skipping lane of length {len(lane)}.")
                         continue
 
                     # Generate inputs
                     X = lane[:, 0]
                     y = lane[:, 1]
-                    X_scaled, y_scaled, max_error_scaled, params = self._gen_inputs(X, y, self.estimator.max_error)
+
+                    X_scaled, y_scaled, max_error_scaled, params = self._min_max_scaler(X, y, self.estimator.max_error)
 
                     # Estimate coeffs, generate X, predict y
                     coeffs = self.estimator.fit(X_scaled, y_scaled, max_error_scaled)
@@ -119,17 +107,6 @@ class BaseLaneDetector():
         X = X_scaled * (X_max - X_min) + X_min
         y = y_scaled * (y_max - y_min) + y_min
         return X, y
-    
-    def _gen_inputs(self, X, y, max_error):
-        X, y, max_error, params = self._min_max_scaler(X, y, max_error)
-        
-        X_mat = [np.ones_like(X)]
-        
-        for i in range(1, self.estimator.poly_size):
-            X_mat.append(X**i)
-        X = np.column_stack(X_mat)
-
-        return X, y, max_error, params
 
 if __name__=="__main__":
     from models import RANSACRegression

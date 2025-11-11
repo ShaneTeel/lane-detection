@@ -2,7 +2,6 @@ import cv2
 import numpy as np
 from typing import Literal
 from studio import StudioManager
-from preprocessing import BEVTransformer
 from utils import RegressionEvaluator, ROISelector, KalmanFilter
 
 class KalmanLaneDetector():
@@ -33,7 +32,6 @@ class KalmanLaneDetector():
         
         self.studio = StudioManager(source, stroke_color, fill_color)
         self.mask = ROISelector(roi)
-        self.bev = BEVTransformer(self.mask.roi, (self.studio.source.height, self.studio.source.width), self.mask.x_max, self.mask.y_max)
         self.generator = preprocessor
         self.estimator = estimator
         self.curr_weight = factor
@@ -73,7 +71,7 @@ class KalmanLaneDetector():
                     # Generate inputs
                     X = lane[:, 0]
                     y = lane[:, 1]
-                    X_scaled, y_scaled, max_error_scaled, params = self._gen_inputs(X, y, self.estimator.max_error)
+                    X_scaled, y_scaled, max_error_scaled, params = self._min_max_scaler(X, y, self.estimator.max_error)
 
                     # Estimate coeffs, generate X, predict y
                     coeffs = self.estimator.fit(X_scaled, y_scaled, max_error_scaled)
@@ -132,17 +130,6 @@ class KalmanLaneDetector():
         X = X_scaled * (X_max - X_min) + X_min
         y = y_scaled * (y_max - y_min) + y_min
         return X, y
-    
-    def _gen_inputs(self, X, y, max_error):
-        X, y, max_error, params = self._min_max_scaler(X, y, max_error)
-        
-        X_mat = [np.ones_like(X)]
-        
-        for i in range(1, self.estimator.poly_size):
-            X_mat.append(X**i)
-        X = np.column_stack(X_mat)
-
-        return X, y, max_error, params
 
 if __name__=="__main__":
     import numpy as np
@@ -155,6 +142,6 @@ if __name__=="__main__":
                      [520, 320], 
                      [450, 320]]], dtype=np.int32)
 
-    hough = BaseLaneDetector(src, roi)
+    hough = KalmanLaneDetector(src, roi)
 
     hough.detect("mosaic", stroke=True, fill=True)

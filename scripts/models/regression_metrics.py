@@ -1,6 +1,4 @@
-import numpy as np
-
-class RegressionEvaluator():
+class RegressionMetrics():
 
     def __init__(self):
 
