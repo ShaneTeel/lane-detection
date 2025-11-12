@@ -12,9 +12,9 @@ if __name__=="__main__":
                      [520, 320], 
                      [450, 320]]], dtype=np.int32)
     
-    estimator = RANSACRegression()
-    preprocessor = CannyFeatureEngineer()
+    estimator = KalmanFilteredRANSAC(min_inliers=0.7, max_error=10)
+    preprocessor = HoughFeatureEngineer()
 
     detector = BaseDetector(src, preprocessor, estimator, roi)
 
-    detector.detect(None, stroke=True, fill=True)
+    detector.detect("composite", stroke=True, fill=True)

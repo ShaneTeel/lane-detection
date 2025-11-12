@@ -12,9 +12,9 @@ class KalmanFilteredRANSAC():
         self.kalman_right = None
         self.fps = fps
         self.environment = environment
-        self.name = "Kalman Filtered RANSAC Regression"
+        self.name = "Kalman Filtered OLS Regression"
 
-    def fit(self, X, y, y_range, direction:Literal["left", "right"]):
+    def fit(self, X, y, y_range:float, direction:str):
         coeffs = self.estimator.fit(X, y, y_range)
 
         if direction == "left" and self.kalman_left is None:
@@ -32,11 +32,17 @@ class KalmanFilteredRANSAC():
 
         return kalman.get_coeffs()
     
-    def predict(self, coeffs, n):
-        return self.estimator.predict(coeffs, n)
+    def predict(self, coeffs):
+        return self.estimator.predict(coeffs)
     
     def _update_fps(self, fps):
         self.fps = fps
+        
+    def _get_fitted_X_y(self):
+        return self.estimator._get_fitted_X_y()
+    
+    def _poly_val(self, coeffs, X):
+        return self.estimator._poly_val(coeffs, X)
     
 class KalmanFilteredOLS():
 
@@ -49,8 +55,8 @@ class KalmanFilteredOLS():
         self.environment = environment
         self.name = "Kalman Filtered OLS Regression"
 
-    def fit(self, X, y, y_range, direction:Literal["left", "right"]):
-        coeffs = self.estimator.fit(X, y, y_range)
+    def fit(self, X, y, y_range:float, direction:str):
+        coeffs = self.estimator.fit(X, y)
 
         if direction == "left" and self.kalman_left is None:
             self.kalman_left = KalmanFilter(self.fps, coeffs, self.environment)
@@ -67,11 +73,17 @@ class KalmanFilteredOLS():
 
         return kalman.get_coeffs()
     
-    def predict(self, coeffs, n):
-        return self.estimator.predict(coeffs, n)
+    def predict(self, coeffs):
+        return self.estimator.predict(coeffs)
     
     def _update_fps(self, fps):
         self.fps = fps
+
+    def _get_fitted_X_y(self):
+        return self.estimator._get_fitted_X_y()
+    
+    def _poly_val(self, coeffs, X):
+        return self.estimator._poly_val(coeffs, X)
     
 class KalmanFilter():
 

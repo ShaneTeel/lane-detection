@@ -90,7 +90,6 @@ class CannyFeatureExtractor():
             configs = self._DEFAULT_CONFIGS
         else:
             configs = get_configs(configs, self._DEFAULT_CONFIGS, self._VALID_SETUP)
-        
            
         self.filter_type = configs["filter_type"]
         self.n_std = configs["n_std"]

@@ -8,20 +8,21 @@ class OLSRegression:
         self.degree = degree
         self.poly_size = self.degree + 1
         self.inlier_ratio = 1.0
-        self.max_error = None
         self.fps = fps
         self.name = "OLS Regression"
     
-    def fit(self, X, y, y_range=None, direction:str=None):
+    def fit(self, X, y, y_range:float=None, direction:str=None):
         # Generate X matrix
         X_mat = self._gen_X_design(X)
         
+        self.fitted_X, self.fitted_y = X, y
+
         # Estimate best coeffs
         return self._calc_coeffs(X_mat, y)
     
-    def predict(self, coeffs, n):
+    def predict(self, coeffs):
         # Generate 100 points in scaled space
-        X_lin = np.linspace(0, 1, n)
+        X_lin = np.linspace(0, 1, 100)
 
         # Estimate respective y-values in scaled space
         y_pred = self._poly_val(coeffs, X_lin)
@@ -58,3 +59,9 @@ class OLSRegression:
     
     def _update_fps(self, fps):
         self.fps = fps
+
+    def _get_fitted_X_y(self):
+        return self.fitted_X, self.fitted_y
+    
+    def _set_scaler(self, scaler):
+        self.scaler = scaler

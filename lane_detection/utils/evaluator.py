@@ -1,3 +1,5 @@
+import numpy as np
+
 class RegressionEvaluator():
 
     _BOLD = "\033[1m"
@@ -11,10 +13,12 @@ class RegressionEvaluator():
         self.right = None
 
     def evaluate(self, y_true, y_pred, direction):
-        if direction == "left" and self.left is None:
-            self.left = RegressionMetrics()
-        elif direction == "right" and self.right is None:
-            self.right = RegressionMetrics()
+        if self.left is None or self.right is None:
+            if direction == "left":
+                self.left = RegressionMetrics()
+            
+            elif direction == "right":
+                self.right = RegressionMetrics()
 
         metrics = self.left if direction == "left" else self.right
 
@@ -35,9 +39,7 @@ class RegressionEvaluator():
         print(report_right)
 
     def _calc_avgs(self, attr):
-        avgs = []
-        for _, lst in attr.__dict__.items():
-            avgs.append(sum(lst) / len(lst) if len(lst) != 0 else 0)
+        avgs = [np.mean(lst) if len(lst) != 0 else 0 for lst in attr.__dict__.values()]
         return avgs
 
 class RegressionMetrics():
@@ -55,21 +57,21 @@ class RegressionMetrics():
             print("`y_true` contains no points.")
             return
         
-        self.r2.append(self._get_r2(y_true, y_pred, n))
+        self.r2.append(self._get_r2(y_true, y_pred))
         self.mse.append(self._get_mse(y_true, y_pred, n))
         self.rmse.append(self._get_rmse(y_true, y_pred, n))
-        self.mae.append(self._get_mae(y_true, y_pred, n))
+        self.mae.append(self._get_mae(y_true, y_pred))
         
     def _get_rss(self, y_true, y_pred):
-        return sum((y_true - y_pred)**2)
+        return np.sum((y_true - y_pred)**2)
     
-    def _get_tss(self, y_true, n):
-        y_mean = sum(y_true) / n
-        return sum((y_true - y_mean)**2)
+    def _get_tss(self, y_true):
+        y_mean = np.mean(y_true)
+        return np.sum((y_true - y_mean)**2)
 
-    def _get_r2(self, y_true, y_pred, n):
+    def _get_r2(self, y_true, y_pred):
         rss = self._get_rss(y_true, y_pred)
-        tss = self._get_tss(y_true, n)
+        tss = self._get_tss(y_true)
         r2 = 1 - rss / tss
         return r2
     
@@ -81,5 +83,5 @@ class RegressionMetrics():
         mse = self._get_mse(y_true, y_pred, n)
         return mse**0.5
     
-    def _get_mae(self, y_true, y_pred, n):
-        return sum(abs(y_true - y_pred)) / n
+    def _get_mae(self, y_true, y_pred):
+        return np.mean(abs(y_true - y_pred))

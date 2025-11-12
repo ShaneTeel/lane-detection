@@ -5,7 +5,6 @@ Tasks:
 		- Bezier Curves
 		- Clothoid
 		- Sliding Window
-		- Kalman Filter
 	
 	2. ROI Calculator
 		- Vanishing Point
@@ -24,10 +23,6 @@ Tasks:
 
 	9. Auto-calc best resize for both mosaic and inset view
 		- Instead of fixed param for cv2.resize, identify method for dynamic calculation based on users window size
-
-	10. Finish RegressionJudge()
-		- Convert instances from dict of running sum to a list for each metric calculated for each lane
-		- Add a __str__() function for the class so that when is printed the avg metrics are printed with the best, worst, and random sample frame metrics are printed 
 
 	11. Identify classification mechanism for lane lines drawn
 		- What do the lines do?

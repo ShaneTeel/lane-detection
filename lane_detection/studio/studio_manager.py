@@ -42,7 +42,7 @@ class StudioManager():
         else:
             return False, None
         
-    def _get_frame_names(self, view_style):
+    def _get_frame_names(self, view_style:str=None):
         view_style_names = {
             "inset": ["Original", "Threshold", "Edge Map"],
             "mosaic": ["Original", "Threshold", "Edge Map", "Composite"],
