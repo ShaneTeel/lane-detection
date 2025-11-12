@@ -12,7 +12,7 @@ class BaseDetector():
         self.scaler = MinMaxScaler()
         self.preprocessor = preprocessor
         self.estimator = estimator
-        self.ransac = True if hasattr(self.estimator, "n_iter") else False
+        self.estimator._update_fps(self.studio.source.fps)
         self.metrics = Evaluator()
 
     def detect(self, view_style: Literal[None, "inset", "mosaic", "composite"]="inset", stroke:bool=False, fill:bool=True, save:bool=False):        
@@ -49,15 +49,10 @@ class BaseDetector():
 
                     # Scale X, y
                     X, y = self.scaler.transform(X, y)
+                    y_range = self.scaler.y_max - self.scaler.y_min
 
                     # Estimate coeffs, generate X, predict y
-                    if self.ransac:
-                        y_range = self.scaler.y_max - self.scaler.y_min
-                        max_error = np.abs(self.estimator.max_error / y_range)
-                        coeffs = self.estimator.fit(X, y, max_error)
-                    else:
-                        coeffs = self.estimator.fit(X, y)
-
+                    coeffs = self.estimator.fit(X, y, y_range, direction)
                     X_lin, y_pred = self.estimator.predict(coeffs)
                     
                     # Inverse scale, and create points

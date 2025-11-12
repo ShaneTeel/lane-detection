@@ -4,14 +4,15 @@ from lane_detection.utils import MinMaxScaler
 class OLSRegression:
     '''Test'''
     
-    def __init__(self, degree:int = 2):
+    def __init__(self, fps:int=None, degree:int = 2):
         self.degree = degree
         self.poly_size = self.degree + 1
-        self.inlier_ratio = None
-        self.max_error
+        self.inlier_ratio = 1.0
+        self.max_error = None
+        self.fps = fps
         self.name = "OLS Regression"
     
-    def fit(self, X, y):
+    def fit(self, X, y, y_range=None, direction:str=None):
 
         # Generate X matrix
         X_mat = self._gen_X_design(X)
@@ -55,3 +56,6 @@ class OLSRegression:
         X = np.column_stack(X_mat)
 
         return X
+    
+    def _update_fps(self, fps):
+        self.fps = fps
