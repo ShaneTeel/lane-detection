@@ -13,7 +13,6 @@ class OLSRegression:
         self.name = "OLS Regression"
     
     def fit(self, X, y, y_range=None, direction:str=None):
-
         # Generate X matrix
         X_mat = self._gen_X_design(X)
         
