@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 from typing import Literal
 from lane_detection.studio import StudioManager
-from lane_detection.utils import Evaluator, ROISelector, MinMaxScaler
+from lane_detection.utils import RegressionEvaluator, ROISelector, MinMaxScaler
 
 class BaseDetector():
 
@@ -13,14 +13,18 @@ class BaseDetector():
         self.preprocessor = preprocessor
         self.estimator = estimator
         self.estimator._update_fps(self.studio.source.fps)
-        self.metrics = Evaluator()
+        self.evaluate = RegressionEvaluator()
 
-    def detect(self, view_style: Literal[None, "inset", "mosaic", "composite"]="inset", stroke:bool=False, fill:bool=True, save:bool=False):        
-        win_name = f"{self.studio.source.name} {self.estimator.name} {view_style.capitalize()} View"
-        cv2.namedWindow(win_name)
-        frame_names = self.studio._get_frame_names(view_style)
+    def detect(self, view_style: Literal[None, "inset", "mosaic", "composite"]="inset", stroke:bool=False, fill:bool=True, save:bool=False):
+        evaluation_report_name = f"{self.studio.source.name} {self.estimator.name}"
+        if view_style is not None:
+            win_name = f"{evaluation_report_name} {view_style.capitalize()} View"
+            cv2.namedWindow(win_name)
 
-        if self.studio.source.source_type != "image" or view_style is not None:
+        if save or view_style is not None:
+            frame_names = self.studio._get_frame_names(view_style)
+
+        if self.studio.source.source_type != "image" and view_style is not None:
             self.studio.playback.print_playback_menu()
         
         if save:
@@ -29,8 +33,7 @@ class BaseDetector():
         while True:
             ret, frame = self.studio.return_frame()
             if not ret:
-                self.studio.source.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                continue
+                break
             else:
                 masked = self.mask.inverse_mask(frame)
                 thresh, edge_map, kps = self.preprocessor.transform(masked, self.mask.x_mid)
@@ -48,26 +51,33 @@ class BaseDetector():
                     y = lane[:, 1]
 
                     # Scale X, y
-                    X, y = self.scaler.transform(X, y)
+                    X_scaled, y_scaled = self.scaler.transform(X, y)
+                    n = len(y)
                     y_range = self.scaler.y_max - self.scaler.y_min
 
                     # Estimate coeffs, generate X, predict y
-                    coeffs = self.estimator.fit(X, y, y_range, direction)
-                    X_lin, y_pred = self.estimator.predict(coeffs)
+                    coeffs = self.estimator.fit(X_scaled, y_scaled, y_range, direction)
+                    X_lin_scaled, y_pred_scaled = self.estimator.predict(coeffs, n)
                     
-                    # Inverse scale, and create points
-                    X, y = self.scaler.inverse_transform(X_lin, y_pred)
-                    points = np.array([X, y], dtype=np.int32).T
+                    # Inverse scale, Evaluate fit, and create points
+                    X_lin, y_pred = self.scaler.inverse_transform(X_lin_scaled, y_pred_scaled)
+                    self.evaluate.evaluate(y, y_pred, direction)
+
+                    points = np.array([X_lin, y_pred], dtype=np.int32).T
 
                     lane_lines.append(points)
 
-                frame_lst = [frame, thresh, edge_map]
-                final = self.studio.gen_view(frame_lst, frame_names, lane_lines, view_style, stroke=stroke, fill=fill)
+                if save or view_style is not None:
+                    frame_lst = [frame, thresh, edge_map]
+                    final = self.studio.gen_view(frame_lst, frame_names, lane_lines, view_style, stroke=stroke, fill=fill)
 
-                cv2.imshow(win_name, final)
-
+                if view_style is not None:
+                    cv2.imshow(win_name, final)
+    
                 if save:
                     self.studio.write.writer.write(final)
 
                 if self.studio.playback.playback_controls():
                     break
+
+        self.evaluate.regression_report(evaluation_report_name)

@@ -1,6 +1,6 @@
 from .roi_selector import ROISelector
-from .evaluator import Evaluator
+from .evaluator import RegressionEvaluator
 from .expirements import PythonFilters
 from .scaler import MinMaxScaler
 
-__all__ = ["ROISelector", "Evaluator", "MinMaxScaler", "PythonFilters"]
+__all__ = ["ROISelector", "RegressionEvaluator", "MinMaxScaler", "PythonFilters"]

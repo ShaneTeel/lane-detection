@@ -32,8 +32,8 @@ class KalmanFilteredRANSAC():
 
         return kalman.get_coeffs()
     
-    def predict(self, coeffs):
-        return self.estimator.predict(coeffs)
+    def predict(self, coeffs, n):
+        return self.estimator.predict(coeffs, n)
     
     def _update_fps(self, fps):
         self.fps = fps
@@ -67,8 +67,8 @@ class KalmanFilteredOLS():
 
         return kalman.get_coeffs()
     
-    def predict(self, coeffs):
-        return self.estimator.predict(coeffs)
+    def predict(self, coeffs, n):
+        return self.estimator.predict(coeffs, n)
     
     def _update_fps(self, fps):
         self.fps = fps

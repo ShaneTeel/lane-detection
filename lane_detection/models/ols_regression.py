@@ -19,9 +19,9 @@ class OLSRegression:
         # Estimate best coeffs
         return self._calc_coeffs(X_mat, y)
     
-    def predict(self, coeffs):
+    def predict(self, coeffs, n):
         # Generate 100 points in scaled space
-        X_lin = np.linspace(0, 1, 100)
+        X_lin = np.linspace(0, 1, n)
 
         # Estimate respective y-values in scaled space
         y_pred = self._poly_val(coeffs, X_lin)

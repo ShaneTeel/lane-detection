@@ -48,6 +48,9 @@ class StudioManager():
             "mosaic": ["Original", "Threshold", "Edge Map", "Composite"],
             "composite": ["Composite"]
         }
+        if view_style is None:
+            return "Composite"
+        
         try:
             names = view_style_names[view_style]
             return names

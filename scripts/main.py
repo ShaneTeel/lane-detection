@@ -12,9 +12,9 @@ if __name__=="__main__":
                      [520, 320], 
                      [450, 320]]], dtype=np.int32)
     
-    estimator = KalmanFilteredOLS()
+    estimator = RANSACRegression()
     preprocessor = CannyFeatureEngineer()
 
     detector = BaseDetector(src, preprocessor, estimator, roi)
 
-    detector.detect("mosaic", stroke=True, fill=True)
+    detector.detect(None, stroke=True, fill=True)

@@ -108,8 +108,8 @@ class RANSACRegression():
         except:
             pass # REEVALUTE `PASS`
 
-    def predict(self, coeffs):
-        return self.ols.predict(coeffs)
+    def predict(self, coeffs, n):
+        return self.ols.predict(coeffs, n)
     
     def _evaluate_fit(self, coeffs, X, y, y_range):
         y_pred = self.ols._poly_val(coeffs, X)
