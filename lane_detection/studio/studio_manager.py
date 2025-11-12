@@ -1,9 +1,9 @@
-from .read import Reader
-from .write import Writer
-from .illustrate import Illustrator
-from .render import Render
-from .control import Controller
-from .custodian import Custodian
+from lane_detection.studio.read import Reader
+from lane_detection.studio.write import Writer
+from lane_detection.studio.illustrate import Illustrator
+from lane_detection.studio.render import Render
+from lane_detection.studio.control import Controller
+from lane_detection.studio.custodian import Custodian
 
 class StudioManager():
     

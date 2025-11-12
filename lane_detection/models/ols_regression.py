@@ -1,4 +1,5 @@
 import numpy as np
+from lane_detection.utils import MinMaxScaler
 
 class OLSRegression:
     '''Test'''
@@ -6,8 +7,12 @@ class OLSRegression:
     def __init__(self, degree:int = 2):
         self.degree = degree
         self.poly_size = self.degree + 1
+        self.inlier_ratio = None
+        self.max_error
+        self.name = "OLS Regression"
     
     def fit(self, X, y):
+
         # Generate X matrix
         X_mat = self._gen_X_design(X)
         
@@ -20,6 +25,7 @@ class OLSRegression:
 
         # Estimate respective y-values in scaled space
         y_pred = self._poly_val(coeffs, X_lin)
+
         return X_lin, y_pred
         
     def _calc_coeffs(self, X:np.ndarray, y:np.ndarray):

@@ -1,5 +1,5 @@
 import numpy as np
-from .ols_regression import OLSRegression
+from lane_detection.models.ols_regression import OLSRegression
 
 class RANSACRegression():
     '''Test'''
@@ -7,11 +7,13 @@ class RANSACRegression():
     def __init__(self, degree:int = 2, n_iter:int=50, min_inliers:float = 0.8, max_error:int = 10):
 
         self.ols = OLSRegression(degree)
-        self.sample_size = self.ols.poly_size + 2
+        self.poly_size = self.ols.poly_size
+        self.sample_size = self.poly_size + 2
         self.n_iter = n_iter
         self.min_inliers = min_inliers
         self.max_error = max_error
         self.inlier_ratio = None
+        self.name = "RANSAC Regression"
 
     def fit(self, X, y, max_error):
 
@@ -119,7 +121,7 @@ class RANSACRegression():
         if max_error is None:
             threshold = 1e-6
         else:
-            threshold = np.abs(max_error)
+            threshold = max_error
 
         inlier_mask = sample_errors <= threshold
         inlier_count = np.sum(inlier_mask)

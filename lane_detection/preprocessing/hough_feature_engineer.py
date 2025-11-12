@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
-from .canny_feature_engineer import CannyEdgeGenerator
-from .config_manager import ConfigManager
+from lane_detection.preprocessing.canny_feature_engineer import CannyEdgeGenerator
+from lane_detection.preprocessing.config_manager import ConfigManager
 
 
 class HoughFeatureEngineer():
@@ -38,7 +38,7 @@ class HoughFeatureEngineer():
         self.generator = CannyEdgeGenerator(gen_configs)
         self.extractor = HoughLineGenerator(ext_configs)
     
-    def preprocess(self, frame, x_mid):
+    def transform(self, frame, x_mid):
         thresh, edge_map = self.generator.generate(frame)
         kps = self.extractor.extract(edge_map, x_mid)
         return thresh, edge_map, kps   

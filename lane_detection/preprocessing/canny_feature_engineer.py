@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 from typing import Literal
-from .config_manager import ConfigManager
+from lane_detection.preprocessing.config_manager import ConfigManager
 
 class CannyFeatureEngineer():
 
@@ -32,7 +32,7 @@ class CannyFeatureEngineer():
         self.generate = CannyEdgeGenerator(gen_configs)
         self.extract = CannyFeatureExtractor(ext_configs)
 
-    def preprocess(self, frame, x_mid):
+    def transform(self, frame, x_mid):
         thresh, edge_map = self.generate.generate(frame)
         kps = self.extract.extract(edge_map, x_mid)
         return thresh, edge_map, kps

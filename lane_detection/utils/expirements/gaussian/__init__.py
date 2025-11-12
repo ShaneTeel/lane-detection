@@ -1,1 +1,1 @@
-from .gaussian_blur import GaussianBlur
+from lane_detection.utils.expirements.gaussian.gaussian_blur import GaussianBlur
