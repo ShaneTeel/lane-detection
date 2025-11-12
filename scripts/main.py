@@ -1,6 +1,6 @@
 if __name__=="__main__":
     import numpy as np
-    from lane_detection.models import RANSACRegression, OLSRegression
+    from lane_detection.models import RANSACRegression, OLSRegression, KalmanFilteredRANSAC, KalmanFilteredOLS
     from lane_detection.preprocessing import CannyFeatureEngineer, HoughFeatureEngineer
     from lane_detection.detectors import BaseDetector
     
@@ -12,7 +12,7 @@ if __name__=="__main__":
                      [520, 320], 
                      [450, 320]]], dtype=np.int32)
     
-    estimator = RANSACRegression()
+    estimator = KalmanFilteredOLS()
     preprocessor = CannyFeatureEngineer()
 
     detector = BaseDetector(src, preprocessor, estimator, roi)
