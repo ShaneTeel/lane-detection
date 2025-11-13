@@ -1,24 +1,42 @@
 class MinMaxScaler():
 
     def __init__(self):
-        self.X_max = None
-        self.X_min = None
-        self.y_max = None
-        self.y_min = None
+        self._is_fitted = False
+
+    def fit(self, X, y):
+        if X is None or y is None:
+            raise ValueError(f"Error: 'X' ({X}) or 'y' ({y}) == 'NoneType'")
+        
+        self.X_min, self.X_max = X.min(), X.max()
+        self.y_min, self.y_max = y.min(), y.max()
+        self._is_fitted = True
+        return self
 
     def transform(self, X, y):
         if X is None or y is None:
             raise ValueError(f"Error: 'X' ({X}) or 'y' ({y}) == 'NoneType'")
         
-        self.X_min, self.X_max = X.min(), X.max()
-        X = (X - self.X_min) / (self.X_max - self.X_min) if self.X_max > self.X_min else X
+        if not self._is_fitted:
+            raise RuntimeError("Scaler must be fitted before transform")
 
-        self.y_min, self.y_max = y.min(), y.max()
+        X = (X - self.X_min) / (self.X_max - self.X_min) if self.X_max > self.X_min else X
         y = (y - self.y_min) / (self.y_max - self.y_min) if self.y_max > self.y_min else y
 
         return X, y
+    
+    def fit_transform(self, X, y):
+        if X is None or y is None:
+            raise ValueError(f"Error: 'X' ({X}) or 'y' ({y}) == 'NoneType'")
+        
+        return self.fit(X, y).transform(X, y)
 
     def inverse_transform(self, X_scaled, y_scaled):
+        if X is None or y is None:
+            raise ValueError(f"Error: 'X' ({X}) or 'y' ({y}) == 'NoneType'")
+        
+        if not self._is_fitted:
+            raise RuntimeError("Scaler must be fitted before inverse_transform")
+
         X = X_scaled * (self.X_max - self.X_min) + self.X_min
         y = y_scaled * (self.y_max - self.y_min) + self.y_min
         return X, y

@@ -114,11 +114,11 @@ class RANSACRegression():
     def predict(self, coeffs):
         return self.estimator.predict(coeffs)
     
-    def _poly_val(self, coeffs, X):
-        return self.estimator._poly_val(coeffs, X)
+    def poly_val(self, coeffs, X):
+        return self.estimator.poly_val(coeffs, X)
 
     def _evaluate_sample_fit(self, coeffs, X, y, y_range):
-        y_pred = self._poly_val(coeffs, X)
+        y_pred = self.poly_val(coeffs, X)
 
         # Use absolute error
         sample_errors = np.abs(y - y_pred)
@@ -141,8 +141,8 @@ class RANSACRegression():
         sample_y = y[sample_idx]
         return sample_X, sample_y
     
-    def _update_fps(self, fps):
+    def update_fps(self, fps):
         self.fps = fps
 
-    def _get_fitted_X_y(self):
-        return self.estimator._get_fitted_X_y()
+    def get_fitted_X_y(self):
+        return self.estimator.get_fitted_X_y()

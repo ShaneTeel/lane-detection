@@ -41,8 +41,8 @@ class StudioManager():
             return True, frame
         else:
             return False, None
-        
-    def _get_frame_names(self, view_style:str=None):
+
+    def get_frame_names(self, view_style:str=None):
         view_style_names = {
             "inset": ["Original", "Threshold", "Edge Map"],
             "mosaic": ["Original", "Threshold", "Edge Map", "Composite"],
@@ -59,3 +59,18 @@ class StudioManager():
         
     def get_fps(self):
         return self.source.fps
+    
+    def create_writer(self):
+        self.write._initialize_writer()
+
+    def write_frames(self, frame):
+        if self.write.writer:
+            self.write.save_object(frame)
+        else:
+            raise RuntimeError("ERROR: Never created writer object")
+        
+    def print_menu(self):
+        self.playback.print_playback_menu()
+    
+    def source_type(self):
+        return self.source.source_type

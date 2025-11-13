@@ -35,11 +35,14 @@ class KalmanFilteredRANSAC():
     def predict(self, coeffs):
         return self.estimator.predict(coeffs)
         
-    def _get_fitted_X_y(self):
-        return self.estimator._get_fitted_X_y()
+    def update_fps(self, fps):
+        self.fps = fps
+
+    def get_fitted_X_y(self):
+        return self.estimator.get_fitted_X_y()
     
-    def _poly_val(self, coeffs, X):
-        return self.estimator._poly_val(coeffs, X)
+    def poly_val(self, coeffs, X):
+        return self.estimator.poly_val(coeffs, X)
     
 class KalmanFilteredOLS():
 
@@ -73,11 +76,14 @@ class KalmanFilteredOLS():
     def predict(self, coeffs):
         return self.estimator.predict(coeffs)
 
-    def _get_fitted_X_y(self):
-        return self.estimator._get_fitted_X_y()
+    def update_fps(self, fps):
+        self.fps = fps
+
+    def get_fitted_X_y(self):
+        return self.estimator.get_fitted_X_y()
     
-    def _poly_val(self, coeffs, X):
-        return self.estimator._poly_val(coeffs, X)
+    def poly_val(self, coeffs, X):
+        return self.estimator.poly_val(coeffs, X)
     
 class KalmanFilter():
 

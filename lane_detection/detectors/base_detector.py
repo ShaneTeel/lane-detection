@@ -10,10 +10,9 @@ class BaseDetector():
         self.studio = StudioManager(source, stroke_color, fill_color)
         fps = self.studio.get_fps()
         self.mask = ROISelector(roi)
-        self.scaler = MinMaxScaler()
         self.preprocessor = preprocessor
         self.estimator = estimator
-        self.estimator.fps = fps
+        self.estimator.update_fps(fps)
         self.evaluate = RegressionEvaluator()
 
     def detect(self, view_style: Literal[None, "inset", "mosaic", "composite"]="inset", stroke:bool=False, fill:bool=True, save:bool=False):
@@ -34,15 +33,8 @@ class BaseDetector():
                         print(f"WARNING: {direction} lane does not have enough points to perform fit. Skipping lane of length {len(lane)}.")
                         continue
 
-                    X_scaled, y_scaled, y_range = self.generate_inputs(lane)
-                    coeffs, X_100, y_pred_100 = self.fit_predict(X_scaled, y_scaled, y_range, direction)
-
-                    # Format and append points
-                    points = self.generate_final_points(coeffs, X_100, y_pred_100)
+                    points = self.process_lane(lane, direction)
                     lane_lines.append(points)
-
-                    # Evaluate fit, predict
-                    self.evaluate_fit_predict(coeffs, direction)
 
                 frame_lst = [frame, thresh, edge_map]
                 final = self.studio.gen_view(frame_lst, frame_names, lane_lines, view_style, stroke, fill)
@@ -55,34 +47,33 @@ class BaseDetector():
                     self.studio.write.save_object(final)
 
         return self.evaluate
-
-    def fit_predict(self, X, y, y_range:float=None, direction:str=None):
-        # Estimate coeffs, Generate X, predict y
-        coeffs = self.estimator.fit(X, y, y_range, direction)
-        X_100, y_pred_100 = self.estimator.predict(coeffs)
-        return coeffs, X_100, y_pred_100
     
-    def generate_inputs(self, lane):
-        # Generate inputs
+    def process_lane(self, lane, direction:str):
+        scaler = MinMaxScaler()
+
         X = lane[:, 0]
         y = lane[:, 1]
 
         # Scale X, y; calc y_range
-        X_scaled, y_scaled = self.scaler.transform(X, y)
-        y_range = self.scaler.y_max - self.scaler.y_min
-        return X_scaled, y_scaled, y_range
-    
-    def generate_final_points(self, coeffs, X, y):
-        X_final, y_final = self.scaler.inverse_transform(X, y)
-        
-        return np.array([X_final, y_final], dtype=np.int32).T
-    
-    def evaluate_fit_predict(self, coeffs, direction):
-        fitted_X, fitted_y = self.estimator._get_fitted_X_y()
-        y_pred_scaled = self.estimator._poly_val(coeffs, fitted_X)
-        X_original, y_original = self.scaler.inverse_transform(fitted_X, fitted_y)
-        _, y_pred = self.scaler.inverse_transform(X_original, y_pred_scaled)
+        X_scaled, y_scaled = scaler.fit_transform(X, y)
+        y_range = scaler.y_max - scaler.y_min
+
+        # Estimate coeffs, Generate X, predict y
+        coeffs = self.estimator.fit(X_scaled, y_scaled, y_range, direction)
+        X_100, y_pred_100 = self.estimator.predict(coeffs)
+
+        # Inverse transform points to original space
+        X_final, y_final = scaler.inverse_transform(X_100, y_pred_100)
+        points = np.array([X_final, y_final], dtype=np.int32).T
+
+        # Evaluate fit
+        fitted_X, fitted_y = self.estimator.get_fitted_X_y()
+        y_pred_scaled = self.estimator.poly_val(coeffs, fitted_X)
+        X_original, y_original = scaler.inverse_transform(fitted_X, fitted_y)
+        _, y_pred = scaler.inverse_transform(X_original, y_pred_scaled)
         self.evaluate.evaluate(y_original, y_pred, direction)
+
+        return points
 
     def preprocess(self, frame):
         masked = self.mask.inverse_mask(frame)
@@ -93,9 +84,9 @@ class BaseDetector():
             self.win_name = f"{report_name} {view_style.capitalize()} View"
             cv2.namedWindow(self.win_name)
 
-            if self.studio.source.source_type != "image":
-                self.studio.playback.print_playback_menu()
+            if self.studio.source_type() != "image":
+                self.studio.print_menu()
             if save:
-                self.studio.write._initialize_writer()
-            return self.studio._get_frame_names(view_style.lower())
+                self.studio.create_writer()
+            return self.studio.get_frame_names(view_style.lower())
         

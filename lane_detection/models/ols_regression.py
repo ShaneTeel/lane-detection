@@ -42,7 +42,7 @@ class OLSRegression:
             b = XT @ y
             return np.linalg.solve(A, b).astype(np.ndarray)
         
-    def _poly_val(self, coeffs, X):
+    def poly_val(self, coeffs, X):
         result = coeffs[-1]
         for coef in reversed(coeffs[:-1]):
             result = result * X + coef
@@ -57,11 +57,8 @@ class OLSRegression:
 
         return X
     
-    def _update_fps(self, fps):
+    def update_fps(self, fps):
         self.fps = fps
 
-    def _get_fitted_X_y(self):
+    def get_fitted_X_y(self):
         return self.fitted_X, self.fitted_y
-    
-    def _set_scaler(self, scaler):
-        self.scaler = scaler
