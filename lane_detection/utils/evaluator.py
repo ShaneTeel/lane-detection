@@ -1,54 +1,17 @@
 import numpy as np
 
-class RegressionEvaluator():
-
-    _BOLD = "\033[1m"
-    _ITALICS = "\033[3m"
-    _UNDERLINE = "\033[4m"
-    _END = "\033[0m" 
-
-    def __init__(self):
-
-        self.left = None
-        self.right = None
-
-    def evaluate(self, y_true, y_pred, direction):
-        if self.left is None or self.right is None:
-            if direction == "left":
-                self.left = RegressionMetrics()
-            
-            elif direction == "right":
-                self.right = RegressionMetrics()
-
-        metrics = self.left if direction == "left" else self.right
-
-        metrics.calc_metrics(y_true, y_pred)
-    
-    def regression_report(self, name):
-        left_avgs = self._calc_avgs(self.left)
-        right_avgs = self._calc_avgs(self.right)
-
-        report = f"\n{self._BOLD}{self._UNDERLINE}{self._ITALICS}{name} Report{self._END}\n"
-        report += f"{self._BOLD}Metrics{self._END}{'R2':>10} {'MSE':>10} {'RMSE':>10} {'MAE':>10}{self._END}\n"
-        report += f"{self._ITALICS}{'Left':>7}{self._END} {left_avgs[0]:10.2f} {left_avgs[1]:10.2f} {left_avgs[2]:10.2f} {left_avgs[3]:10.2f} {self._END}\n"
-        report += f"{self._ITALICS}{'Right':>7}{self._END} {right_avgs[0]:10.2f} {right_avgs[1]:10.2f} {right_avgs[2]:10.2f} {right_avgs[3]:10.2f} {self._END}\n"
-        
-        print(report)
-
-    def _calc_avgs(self, attr):
-        avgs = [np.mean(lst) if len(lst) != 0 else 0 for lst in attr.__dict__.values()]
-        return avgs
-
 class RegressionMetrics():
 
-    def __init__(self):
+    def __init__(self, name:str=None):
 
         self.r2 = []
         self.mse = []
         self.rmse = []
         self.mae = []
+        self.name = "Regression" if name is None else name
+        self.report = None
 
-    def calc_metrics(self, y_true, y_pred):
+    def compute_metrics(self, y_true, y_pred):
         n = len(y_true)
         if n == 0:
             print("`y_true` contains no points.")
@@ -82,3 +45,6 @@ class RegressionMetrics():
     
     def _get_mae(self, y_true, y_pred):
         return np.mean(abs(y_true - y_pred))
+    
+    def return_metrics(self):
+        return {"R2": np.mean(self.r2), "MSE": np.mean(self.mse), "RMSE": np.mean(self.rmse), "MAE": np.mean(self.mae)}

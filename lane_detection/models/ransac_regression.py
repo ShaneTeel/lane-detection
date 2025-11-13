@@ -1,10 +1,11 @@
 import numpy as np
+from numpy.typing import NDArray
 from lane_detection.models.ols_regression import OLSRegression
 
 class RANSACRegression():
     '''Test'''
 
-    def __init__(self, degree:int = 2, n_iter:int=50, min_inliers:float = 0.8, max_error:int = 10, fps:int=None):
+    def __init__(self, degree:int = 2, n_iter:int=50, min_inliers:float = 0.8, max_error:int = 10):
 
         self.estimator = OLSRegression(degree)
         self.poly_size = self.estimator.poly_size
@@ -13,12 +14,14 @@ class RANSACRegression():
         self.n_iter = n_iter
         self.min_inliers = min_inliers
         self.max_error = max_error
-        self.scaler = None
         self.inlier_ratio = None
-        self.fps = fps
         self.name = "RANSAC Regression"
 
-    def fit(self, X, y, y_range:float, direction:str=None):
+    def fit_predict(self, X, y):
+        coeffs = self.fit(X, y)
+        return self.predict(coeffs)
+
+    def fit(self, X:NDArray, y:NDArray):
 
         # Create variables
         best_inliers = None
@@ -62,7 +65,7 @@ class RANSACRegression():
                 continue
             
             # Evaluate sample fit on all points (population, scaled X)
-            inlier_count, inlier_mask = self._evaluate_sample_fit(coeffs, X, y, y_range)
+            inlier_count, inlier_mask = self._evaluate_sample_fit(coeffs, X, y)
 
             # Best coeffs check
             if inlier_count > best_inlier_count:
@@ -111,13 +114,13 @@ class RANSACRegression():
             print("FAIL SAFE FAILED")
             pass # REEVALUTE `PASS`
 
-    def predict(self, coeffs):
+    def predict(self, coeffs:NDArray):
         return self.estimator.predict(coeffs)
     
-    def poly_val(self, coeffs, X):
+    def poly_val(self, coeffs:NDArray, X:NDArray):
         return self.estimator.poly_val(coeffs, X)
 
-    def _evaluate_sample_fit(self, coeffs, X, y, y_range):
+    def _evaluate_sample_fit(self, coeffs:NDArray, X:NDArray, y:NDArray):
         y_pred = self.poly_val(coeffs, X)
 
         # Use absolute error
@@ -128,21 +131,18 @@ class RANSACRegression():
         if self.max_error is None:
             threshold = 1e-6
         else:
-            threshold = self.max_error / y_range if y_range != 0 else self.max_error
+            threshold = self.max_error
 
         inlier_mask = sample_errors <= threshold
         inlier_count = np.sum(inlier_mask)
         return inlier_count, inlier_mask
     
-    def _rand_sampling(self, X, y, population, sample_size):
+    def _rand_sampling(self, X:NDArray, y:NDArray, population:int, sample_size:int):
         # Random sampling
         sample_idx = np.random.choice(population, size=sample_size, replace=False)
         sample_X = X[sample_idx]
         sample_y = y[sample_idx]
         return sample_X, sample_y
-    
-    def update_fps(self, fps):
-        self.fps = fps
 
     def get_fitted_X_y(self):
         return self.estimator.get_fitted_X_y()

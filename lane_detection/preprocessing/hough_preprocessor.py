@@ -1,10 +1,12 @@
 import cv2
 import numpy as np
-from lane_detection.preprocessing.canny_feature_engineer import CannyEdgeGenerator
+from numpy.typing import NDArray
+
+from lane_detection.preprocessing.canny_preprocessor import CannyEdgeGenerator
 from lane_detection.preprocessing.config_manager import ConfigManager
 
 
-class HoughFeatureEngineer():
+class HoughPreprocessor():
 
     _VALID_SETUP = {
         "generator": {
@@ -38,10 +40,10 @@ class HoughFeatureEngineer():
         self.generator = CannyEdgeGenerator(gen_configs)
         self.extractor = HoughLineGenerator(ext_configs)
     
-    def transform(self, frame, x_mid):
+    def preprocess(self, frame:NDArray, x_mid:int):
         thresh, edge_map = self.generator.generate(frame)
-        kps = self.extractor.extract(edge_map, x_mid)
-        return thresh, edge_map, kps   
+        left, right = self.extractor.extract(edge_map, x_mid)
+        return thresh, edge_map, left, right   
 
 class HoughLineGenerator():
     
@@ -65,20 +67,20 @@ class HoughLineGenerator():
         self.min_length = hough['min_length']
         self.max_gap = hough['max_gap']
 
-    def extract(self, edge_map, x_mid):
+    def extract(self, edge_map:NDArray, x_mid:int):
         lines = self._point_extraction(edge_map, self.rho, self.theta, self.thresh, self.min_length, self.max_gap)
         if lines is None:
             return None
-        lanes = self._point_splitting(lines, x_mid)
-        return lanes
+        left, right = self._point_splitting(lines, x_mid)
+        return left, right
 
-    def _point_extraction(self, edge_map, rho, theta, thresh, min_length, max_gap):
+    def _point_extraction(self, edge_map:NDArray, rho, theta, thresh, min_length, max_gap):
         lines = cv2.HoughLinesP(edge_map, rho, theta, thresh, min_length, max_gap)
         if lines is None:
             return None
         return lines
 
-    def _point_splitting(self, lines, x_mid):
+    def _point_splitting(self, lines:list, x_mid:int):
         left = []
         right = []
         for line in lines:
@@ -89,9 +91,10 @@ class HoughLineGenerator():
             if X1 >= x_mid and X2 >= x_mid:
                 right.append([X1, y1])
                 right.append([X2, y2])
-        return [np.array(left), np.array(right)]
+
+        return np.array(left), np.array(right)
     
-def get_configs(user_configs, default_configs, valid_config_setup):
+def get_configs(user_configs:dict, default_configs:dict, valid_config_setup:dict):
     config_mngr = ConfigManager(user_configs, default_configs, valid_config_setup)
     final = config_mngr.manage()
     return final

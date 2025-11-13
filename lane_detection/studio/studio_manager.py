@@ -1,3 +1,7 @@
+from typing import Union
+from numpy.typing import NDArray
+import cv2
+
 from lane_detection.studio.read import Reader
 from lane_detection.studio.write import Writer
 from lane_detection.studio.illustrate import Illustrator
@@ -7,7 +11,7 @@ from lane_detection.studio.custodian import Custodian
 
 class StudioManager():
     
-    def __init__(self, source, stroke_color:tuple = None, fill_color:tuple = None):
+    def __init__(self, source:Union[str, int], stroke_color:tuple = (0, 0, 255), fill_color:tuple = (0, 255, 0)):
 
         self.source = Reader(source)
         self.render = Render()
@@ -15,6 +19,7 @@ class StudioManager():
         self.draw = Illustrator(stroke_color=stroke_color, fill_color=fill_color)
         self.playback = Controller(self.source)
         self.clean = Custodian(self.source, self.write)
+        self.exit = False
 
     def gen_view(self, frame_lst:list, frame_names:list, lines:list, view_style:str, stroke:bool=False, fill:bool=True):
         composite = self.draw.gen_composite(frame_lst[0], lines, stroke, fill)
@@ -63,7 +68,7 @@ class StudioManager():
     def create_writer(self):
         self.write._initialize_writer()
 
-    def write_frames(self, frame):
+    def write_frames(self, frame:NDArray):
         if self.write.writer:
             self.write.save_object(frame)
         else:
@@ -74,3 +79,9 @@ class StudioManager():
     
     def source_type(self):
         return self.source.source_type
+    
+    def control_playback(self):
+        return self.playback.playback_controls()
+    
+    def get_name(self):
+        return self.source.name

@@ -1,9 +1,10 @@
 import cv2
 import numpy as np
+from numpy.typing import NDArray
 from typing import Literal
 from lane_detection.preprocessing.config_manager import ConfigManager
 
-class CannyFeatureEngineer():
+class CannyPreprocessor():
 
     _VALID_SETUP = {
         "generator": {
@@ -32,10 +33,10 @@ class CannyFeatureEngineer():
         self.generate = CannyEdgeGenerator(gen_configs)
         self.extract = CannyFeatureExtractor(ext_configs)
 
-    def transform(self, frame, x_mid):
+    def preprocess(self, frame:NDArray, x_mid:int):
         thresh, edge_map = self.generate.generate(frame)
-        kps = self.extract.extract(edge_map, x_mid)
-        return thresh, edge_map, kps
+        left, right = self.extract.extract(edge_map, x_mid)
+        return thresh, edge_map, left, right
     
 class CannyEdgeGenerator():
     _VALID_SETUP = {
@@ -62,15 +63,15 @@ class CannyEdgeGenerator():
         self.blur_ksize = configs["canny"].get("blur_ksize")
         self.blur_order = configs["canny"].get("blur_order")
         
-    def generate(self, frame):
+    def generate(self, frame:NDArray):
         thresh = self._threshold(frame, self.lower_bounds, self.upper_bounds)
         edge_map = self._detect_edges(thresh, self.weak_edge, self.sure_edge, self.blur_ksize, self.blur_order)
         return thresh, edge_map
     
-    def _threshold(self, frame, lower_bounds, upper_bounds):
+    def _threshold(self, frame:NDArray, lower_bounds:int, upper_bounds:int):
         return cv2.inRange(frame, lower_bounds, upper_bounds)
 
-    def _detect_edges(self, roi, weak_edge, sure_edge, blur_ksize, blur_order):
+    def _detect_edges(self, roi:NDArray, weak_edge:int, sure_edge:int, blur_ksize:Literal[3, 5, 7, 9, 11, 13, 15]=3, blur_order:Literal["before", "after"]="before"):
         kernel = (blur_ksize, blur_ksize)
         if blur_order == 'before':
             img = cv2.GaussianBlur(roi, kernel, 0)
@@ -95,37 +96,38 @@ class CannyFeatureExtractor():
         self.n_std = configs["n_std"]
         self.weight = configs["weight"]
 
-    def extract(self, edge_map, x_mid):
+    def extract(self, edge_map:NDArray, x_mid:int):
         pts = self._point_extraction(edge_map)
-        classified = self._point_splitting(pts, x_mid)
-        return self._point_resampling(classified, self.filter_type, self.n_std, self.weight)
+        left, right = self._point_splitting(pts, x_mid)
+        left, right = self._point_resampling([left, right], self.filter_type, self.n_std)
+        return left, right
     
-    def _point_extraction(self, edge_map):
+    def _point_extraction(self, edge_map:NDArray):
         edge_pts = np.where(edge_map != 0)
         if edge_pts is None:
             return np.array([])
         return np.column_stack((edge_pts[1], edge_pts[0]))
     
-    def _point_splitting(self, pts, x_mid):
+    def _point_splitting(self, pts:NDArray, x_mid:int):
         if len(pts) == 0:
             return [np.array([]), np.array([])]
 
         left = pts[pts[:, 0] < x_mid]
         right = pts[pts[:, 0] >= x_mid]
-        return [left, right]
+        return left, right
 
-    def _point_resampling(self, lanes, filter_type, n_std, weight):
+    def _point_resampling(self, lanes:list, filter_type:Literal["mean", "median"]="median", n_std:float=2.0):
         resampled = []
 
         # Lane X-Val Filter
         for lane in lanes:
             if lane is not None:
                 lane = self._X_point_filtering(lane, filter_type, n_std)
-                # lane = self._point_replication(lane, weight)
                 resampled.append(lane.astype(np.float32))
-        return resampled
 
-    def _X_point_filtering(self, lane, filter_type:Literal["median", "mean"]="median", n_std:float=2.0):
+        return resampled[0], resampled[1]
+
+    def _X_point_filtering(self, lane:NDArray, filter_type:Literal["median", "mean"]="median", n_std:float=2.0):
         X = lane[:, 0]
 
         X_center = np.median(X) if filter_type == "median" else np.mean(X)
@@ -133,7 +135,7 @@ class CannyFeatureExtractor():
         X_mask = np.abs(X - X_center) < (n_std * X_std)
         return lane[X_mask]
     
-def get_configs(user_configs, default_configs, valid_config_setup):
+def get_configs(user_configs:dict, default_configs:dict, valid_config_setup:dict):
     config_mngr = ConfigManager(user_configs, default_configs, valid_config_setup)
     final = config_mngr.manage()
     return final

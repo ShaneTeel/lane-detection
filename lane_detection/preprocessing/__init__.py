@@ -1,5 +1,5 @@
-from .canny_feature_engineer import CannyFeatureEngineer
-from .hough_feature_engineer import HoughFeatureEngineer
+from .canny_preprocessor import CannyPreprocessor
+from .hough_preprocessor import HoughPreprocessor
 from .bev_transform import BEVTransformer
 
-__all__ = ["CannyFeatureEngineer", "HoughFeatureEngineer", "BEVTransformer"]
+__all__ = ["CannyPreprocessor", "HoughPreprocessor", "BEVTransformer"]
