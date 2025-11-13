@@ -1,0 +1,13 @@
+Identify in detail the following:
+
+1. Critical bugs
+
+2. Logic / algorithm / calculation issues
+
+3. Design problems
+
+4. Weak code / practices
+
+5. Recommend improvements
+
+Lastly, evaluate the project from the perspective of a hiring manager, specifically a computer vision engineer-focused hiring manager. 

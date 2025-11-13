@@ -56,3 +56,6 @@ class StudioManager():
             return names
         except Exception as e:
             raise KeyError(f"ERROR: Invalid argument passed to 'view_style'. Must be one of {[key for key in view_style_names.keys()]}")
+        
+    def get_fps(self):
+        return self.source.fps

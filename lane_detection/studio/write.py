@@ -15,7 +15,7 @@ class Writer():
         self.writer.write(frame)
 
     # Gen file download link (app-specific)
-    def get_download_link(file, file_name, text):
+    def get_download_link(self, file, file_name, text):
         buffered = io.BytesIO()
         file.save(buffered, format='mp4')
         file_str = base64.b64encode(buffered.getvalue()).decode()

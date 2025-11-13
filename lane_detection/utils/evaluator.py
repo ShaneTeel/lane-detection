@@ -28,15 +28,12 @@ class RegressionEvaluator():
         left_avgs = self._calc_avgs(self.left)
         right_avgs = self._calc_avgs(self.right)
 
-        report_title = f"\n{self._BOLD}{self._UNDERLINE}{self._ITALICS}{name} Report{self._END}\n"
-        report_header = f"{self._BOLD}Metrics{self._END}{'R2':>10} {'MSE':>10} {'RMSE':>10} {'MAE':>10}{self._END}\n"
-        report_left = f"{self._ITALICS}{'Left':>7}{self._END} {left_avgs[0]:10.2f} {left_avgs[1]:10.2f} {left_avgs[2]:10.2f} {left_avgs[3]:10.2f} {self._END}\n"
-        report_right = f"{self._ITALICS}{'Right':>7}{self._END} {right_avgs[0]:10.2f} {right_avgs[1]:10.2f} {right_avgs[2]:10.2f} {right_avgs[3]:10.2f} {self._END}\n"
+        report = f"\n{self._BOLD}{self._UNDERLINE}{self._ITALICS}{name} Report{self._END}\n"
+        report += f"{self._BOLD}Metrics{self._END}{'R2':>10} {'MSE':>10} {'RMSE':>10} {'MAE':>10}{self._END}\n"
+        report += f"{self._ITALICS}{'Left':>7}{self._END} {left_avgs[0]:10.2f} {left_avgs[1]:10.2f} {left_avgs[2]:10.2f} {left_avgs[3]:10.2f} {self._END}\n"
+        report += f"{self._ITALICS}{'Right':>7}{self._END} {right_avgs[0]:10.2f} {right_avgs[1]:10.2f} {right_avgs[2]:10.2f} {right_avgs[3]:10.2f} {self._END}\n"
         
-        print(report_title)
-        print(report_header)
-        print(report_left)
-        print(report_right)
+        print(report)
 
     def _calc_avgs(self, attr):
         avgs = [np.mean(lst) if len(lst) != 0 else 0 for lst in attr.__dict__.values()]

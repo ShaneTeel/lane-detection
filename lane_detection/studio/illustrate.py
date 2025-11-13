@@ -12,7 +12,7 @@ class Illustrator:
     
     def gen_composite(self, frame, lines, stroke:bool=True, fill:bool=True):
         if not stroke and not fill:
-            assert AssertionError("ERROR: One of `stroke` or `fill` must be `True`. Both cannot be `False`.")
+            raise ValueError("ERROR: One of `stroke` or `fill` must be `True`. Both cannot be `False`.")
         canvas = np.zeros_like(frame)
         left, right = lines
         if left is None and right is None:

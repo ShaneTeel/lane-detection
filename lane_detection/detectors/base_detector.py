@@ -8,11 +8,12 @@ class BaseDetector():
 
     def __init__(self, source, preprocessor, estimator, roi:np.ndarray, stroke_color:tuple=(0, 0, 255), fill_color:tuple=(0, 255, 0)):        
         self.studio = StudioManager(source, stroke_color, fill_color)
+        fps = self.studio.get_fps()
         self.mask = ROISelector(roi)
         self.scaler = MinMaxScaler()
         self.preprocessor = preprocessor
         self.estimator = estimator
-        self.estimator._update_fps(self.studio.source.fps)
+        self.estimator.fps = fps
         self.evaluate = RegressionEvaluator()
 
     def detect(self, view_style: Literal[None, "inset", "mosaic", "composite"]="inset", stroke:bool=False, fill:bool=True, save:bool=False):
@@ -27,7 +28,6 @@ class BaseDetector():
                 thresh, edge_map, kps = self.preprocess(frame)
                 lane_lines = []
                 for i, lane in enumerate(kps):
-
                     # Direction variable
                     direction = "left" if i == 0 else "right"
                     if len(lane) < self.estimator.poly_size:
@@ -52,9 +52,9 @@ class BaseDetector():
                     if self.studio.playback.playback_controls():
                         break
                 if save:
-                    self.studio.write.write(final)
+                    self.studio.write.save_object(final)
 
-        self.evaluate.regression_report(report_name)
+        return self.evaluate
 
     def fit_predict(self, X, y, y_range:float=None, direction:str=None):
         # Estimate coeffs, Generate X, predict y
